@@ -3,7 +3,7 @@ pub mod graph;
 pub mod message;
 pub mod node;
 pub mod reducer;
-pub mod state_snapshot;
+pub mod state;
 pub mod types;
 
 pub fn add(left: u64, right: u64) -> u64 {

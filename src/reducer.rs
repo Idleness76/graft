@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use crate::message::Message;
+use crate::message::*;
 
-trait Reducer<V, U>: Send + Sync {
+pub trait Reducer<V, U>: Send + Sync {
     fn apply(&self, value: &mut V, update: U);
 }
 

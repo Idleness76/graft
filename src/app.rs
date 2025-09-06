@@ -2,16 +2,19 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::node::Node;
+use crate::message::*;
+use crate::node::*;
 use crate::reducer::*;
+use crate::state::*;
+use crate::types::*;
 
-struct App {
-    nodes: HashMap<String, Arc<dyn Node>>,
-    edges: HashMap<String, Vec<String>>,
+pub struct App {
+    pub nodes: HashMap<String, Arc<dyn Node>>,
+    pub edges: HashMap<NodeKind, Vec<NodeKind>>,
     // Reducers per channel
-    add_messages: Arc<AddMessages>,
-    append_outputs: Arc<AppendVec<String>>,
-    map_merge: Arc<MapMerge>,
+    pub add_messages: Arc<AddMessages>,
+    pub append_outputs: Arc<AppendVec<String>>,
+    pub map_merge: Arc<MapMerge>,
 }
 
 impl App {
@@ -20,7 +23,11 @@ impl App {
         let mut step: u64 = 0;
 
         // Run A and B in parallel from START, both go to END
-        let mut frontier: Vec<String> = self.edges.get(START).cloned().unwrap_or_default();
+        let mut frontier: Vec<NodeKind> = self
+            .edges
+            .get(&NodeKind::Start)
+            .cloned()
+            .unwrap_or_default();
         if frontier.is_empty() {
             return Err("No nodes to run from START".into());
         }
@@ -31,7 +38,7 @@ impl App {
             step += 1;
 
             // Stop if only END remains
-            let only_end = frontier.iter().all(|n| n.as_str() == END);
+            let only_end = frontier.iter().all(|n| *n == NodeKind::End);
             if only_end {
                 println!("Reached END at step {}", step);
                 break;
@@ -51,17 +58,17 @@ impl App {
             );
 
             // Execute frontier (parallel)
-            let mut run_ids: Vec<String> = Vec::new();
+            let mut run_ids: Vec<NodeKind> = Vec::new();
             let mut futs = Vec::new();
             for node_id in frontier.iter() {
-                if node_id == END {
+                if *node_id == NodeKind::End {
                     continue;
                 }
                 let id = node_id.clone();
                 run_ids.push(id.clone());
                 let node = self.nodes.get(&id).unwrap().clone();
                 let ctx = NodeContext {
-                    node_id: id.clone(),
+                    node_id: format!("{:?}", id),
                     step,
                 };
                 let snap = snapshot.clone();
@@ -74,7 +81,7 @@ impl App {
             let updated_channels = self.apply_barrier(&state, &run_ids, node_partials).await?;
 
             // Compute next frontier
-            let mut next = Vec::<String>::new();
+            let mut next = Vec::<NodeKind>::new();
             for id in run_ids.iter() {
                 if let Some(dests) = self.edges.get(id) {
                     for d in dests {
@@ -120,7 +127,7 @@ impl App {
     async fn apply_barrier(
         &self,
         state: &Arc<RwLock<VersionedState>>,
-        run_ids: &[String],
+        run_ids: &[NodeKind],
         node_partials: Vec<NodePartial>,
     ) -> Result<Vec<&'static str>> {
         // Aggregate per-channel updates first (efficient and deterministic).
@@ -129,17 +136,17 @@ impl App {
         let mut meta_all: HashMap<String, String> = HashMap::new();
 
         for (i, p) in node_partials.iter().enumerate() {
-            let nid = run_ids.get(i).unwrap_or(&"?".into());
+            let nid = run_ids.get(i).unwrap_or(&NodeKind::Other("?".to_string()));
             if let Some(ms) = &p.messages {
-                println!("  {} -> messages: +{}", nid, ms.len());
+                println!("  {:?} -> messages: +{}", nid, ms.len());
                 msgs_all.extend(ms.clone());
             }
             if let Some(os) = &p.outputs {
-                println!("  {} -> outputs: +{}", nid, os.len());
+                println!("  {:?} -> outputs: +{}", nid, os.len());
                 outs_all.extend(os.clone());
             }
             if let Some(mm) = &p.meta {
-                println!("  {} -> meta: +{} keys", nid, mm.len());
+                println!("  {:?} -> meta: +{} keys", nid, mm.len());
                 for (k, v) in mm {
                     meta_all.insert(k.clone(), v.clone());
                 }
