@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::node::Node;
-use crate::types::NodeKind;
+use crate::app::*;
+use crate::node::*;
+use crate::reducer::*;
+use crate::types::*;
 
 pub struct GraphBuilder {
-    nodes: HashMap<NodeKind, Arc<dyn Node>>,
-    edges: HashMap<NodeKind, Vec<NodeKind>>,
+    pub nodes: HashMap<NodeKind, Arc<dyn Node>>,
+    pub edges: HashMap<NodeKind, Vec<NodeKind>>,
 }
 
 impl GraphBuilder {
@@ -32,7 +34,7 @@ impl GraphBuilder {
             nodes: self.nodes,
             edges: self.edges,
             add_messages: Arc::new(AddMessages),
-            append_outputs: Arc::new(AppendVec::<String>(Default::default())),
+            append_outputs: Arc::new(AppendVec::<String>),
             map_merge: Arc::new(MapMerge),
         }
     }

@@ -9,7 +9,7 @@ pub struct Versioned<T> {
 
 #[derive(Clone, Debug)]
 pub struct VersionedState {
-    pub(crate) messages: Versioned<Vec<Message>>,
+    pub messages: Versioned<Vec<Message>>,
     pub outputs: Versioned<Vec<String>>,
     pub meta: Versioned<HashMap<String, String>>,
 }

@@ -15,7 +15,7 @@ impl Reducer<Vec<Message>, Vec<Message>> for AddMessages {
 }
 
 // 2) Append vector for outputs
-pub struct AppendVec<T>(std::marker::PhantomData<T>);
+pub struct AppendVec<T>(pub std::marker::PhantomData<T>);
 impl<T: Clone + Send + Sync + 'static> Reducer<Vec<T>, Vec<T>> for AppendVec<T> {
     fn apply(&self, value: &mut Vec<T>, update: Vec<T>) {
         value.extend(update);

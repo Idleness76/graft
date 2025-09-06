@@ -1,3 +1,4 @@
+use futures::future::join_all;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -9,7 +10,7 @@ use crate::state::*;
 use crate::types::*;
 
 pub struct App {
-    pub nodes: HashMap<String, Arc<dyn Node>>,
+    pub nodes: HashMap<NodeKind, Arc<dyn Node>>,
     pub edges: HashMap<NodeKind, Vec<NodeKind>>,
     // Reducers per channel
     pub add_messages: Arc<AddMessages>,
@@ -18,7 +19,7 @@ pub struct App {
 }
 
 impl App {
-    async fn invoke(&self, initial_state: VersionedState) -> Result<VersionedState> {
+    pub async fn invoke(&self, initial_state: VersionedState) -> Result<VersionedState> {
         let state = Arc::new(RwLock::new(initial_state));
         let mut step: u64 = 0;
 
@@ -124,7 +125,7 @@ impl App {
         Ok(final_state)
     }
 
-    async fn apply_barrier(
+    pub async fn apply_barrier(
         &self,
         state: &Arc<RwLock<VersionedState>>,
         run_ids: &[NodeKind],
