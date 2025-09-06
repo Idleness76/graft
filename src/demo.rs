@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+mod node;
+
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Result<T> = std::result::Result<T, Error>;
 
@@ -298,9 +300,7 @@ impl App {
             let node_partials: Vec<NodePartial> = join_all(futs).await;
 
             // Barrier: bucket updates per channel and merge deterministically
-            let updated_channels = self
-                .apply_barrier(&state, &run_ids, node_partials)
-                .await?;
+            let updated_channels = self.apply_barrier(&state, &run_ids, node_partials).await?;
 
             // Compute next frontier
             let mut next = Vec::<String>::new();
@@ -338,7 +338,10 @@ impl App {
             println!("  - {:02}: {}", i, o);
         }
 
-        println!("meta (v {}): {:?}", final_state.meta.version, final_state.meta.value);
+        println!(
+            "meta (v {}): {:?}",
+            final_state.meta.version, final_state.meta.value
+        );
 
         Ok(final_state)
     }
