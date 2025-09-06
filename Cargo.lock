@@ -369,6 +369,7 @@ name = "graft"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "futures",
  "rig-core",
  "tokio",
 ]
