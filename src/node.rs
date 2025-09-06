@@ -1,22 +1,20 @@
+use crate::message::Message;
+use crate::state_snapshot::StateSnapshot;
 use async_trait::async_trait;
 use std::collections::HashMap;
 
-/*****************
-  Node abstraction
-******************/
-
 #[derive(Clone, Debug)]
 pub struct NodeContext {
-    node_id: String,
-    step: u64,
+    pub node_id: String,
+    pub step: u64,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct NodePartial {
     // Per-channel partials (all optional)
-    messages: Option<Vec<Message>>,
-    outputs: Option<Vec<String>>,
-    meta: Option<HashMap<String, String>>,
+    pub messages: Option<Vec<Message>>,
+    pub outputs: Option<Vec<String>>,
+    pub meta: Option<HashMap<String, String>>,
 }
 
 #[async_trait]
