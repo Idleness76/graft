@@ -9,6 +9,7 @@ mod tests {
     use super::*;
 
     #[test]
+    /// Verifies that a Message struct can be constructed and its fields are set correctly.
     fn test_message_construction() {
         let msg = Message {
             role: "user".to_string(),
@@ -19,6 +20,7 @@ mod tests {
     }
 
     #[test]
+    /// Checks that cloning a Message produces an identical copy, and modifying the clone does not affect the original.
     fn test_message_cloning() {
         let msg1 = Message {
             role: "system".to_string(),
@@ -33,6 +35,7 @@ mod tests {
     }
 
     #[test]
+    /// Validates equality and inequality comparisons for Message structs with different field values.
     fn test_message_equality() {
         let m1 = Message {
             role: "user".to_string(),

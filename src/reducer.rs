@@ -44,6 +44,7 @@ mod tests {
     use super::*;
 
     #[test]
+    /// Verifies that ADD_MESSAGES appends new messages to the existing vector.
     fn test_add_messages_appends() {
         let mut v = vec![Message {
             role: "user".into(),
@@ -60,6 +61,7 @@ mod tests {
     }
 
     #[test]
+    /// Checks that ADD_MESSAGES does nothing when the update vector is empty.
     fn test_add_messages_empty_update() {
         let mut v = vec![Message {
             role: "user".into(),
@@ -72,6 +74,7 @@ mod tests {
     }
 
     #[test]
+    /// Verifies that APPEND_VEC appends elements to the existing vector.
     fn test_append_vec_appends() {
         let mut v = vec![1, 2];
         let update = vec![3, 4];
@@ -80,6 +83,7 @@ mod tests {
     }
 
     #[test]
+    /// Checks that APPEND_VEC does nothing when the update vector is empty.
     fn test_append_vec_empty_update() {
         let mut v = vec!["a".to_string()];
         let update: Vec<String> = vec![];
@@ -88,6 +92,7 @@ mod tests {
     }
 
     #[test]
+    /// Verifies that MAP_MERGE merges two maps and overwrites existing keys with new values.
     fn test_map_merge_merges_and_overwrites() {
         let mut map = HashMap::new();
         map.insert("k1".to_string(), "v1".to_string());
@@ -100,6 +105,7 @@ mod tests {
     }
 
     #[test]
+    /// Checks that MAP_MERGE does nothing when the update map is empty.
     fn test_map_merge_empty_update() {
         let mut map = HashMap::new();
         map.insert("k1".to_string(), "v1".to_string());

@@ -45,6 +45,7 @@ mod tests {
     use super::*;
 
     #[test]
+    /// Verifies that a new GraphBuilder is initialized with empty nodes and edges.
     fn test_graph_builder_new() {
         let gb = GraphBuilder::new();
         assert!(gb.nodes.is_empty());
@@ -52,6 +53,7 @@ mod tests {
     }
 
     #[test]
+    /// Checks that nodes can be added to the GraphBuilder and are stored correctly.
     fn test_add_node() {
         let gb = GraphBuilder::new()
             .add_node(NodeKind::Start, NodeA)
@@ -62,6 +64,7 @@ mod tests {
     }
 
     #[test]
+    /// Ensures edges can be added between nodes and are tracked properly in the builder.
     fn test_add_edge() {
         let gb = GraphBuilder::new()
             .add_edge(NodeKind::Start, NodeKind::End)
@@ -74,6 +77,7 @@ mod tests {
     }
 
     #[test]
+    /// Validates that compiling a GraphBuilder produces an App with correct nodes, edges, and reducer references.
     fn test_compile() {
         let gb = GraphBuilder::new()
             .add_node(NodeKind::Start, NodeA)
@@ -97,6 +101,7 @@ mod tests {
     }
 
     #[test]
+    /// Tests equality and inequality for NodeKind::Other variant with different string values.
     fn test_nodekind_other_variant() {
         let k1 = NodeKind::Other("foo".to_string());
         let k2 = NodeKind::Other("foo".to_string());
@@ -106,6 +111,7 @@ mod tests {
     }
 
     #[test]
+    /// Checks that duplicate edges between the same nodes are allowed and counted correctly.
     fn test_duplicate_edges() {
         let gb = GraphBuilder::new()
             .add_edge(NodeKind::Start, NodeKind::End)

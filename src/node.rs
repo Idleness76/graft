@@ -83,6 +83,7 @@ mod tests {
     }
 
     #[tokio::test]
+    /// Verifies NodeA's behavior when run with an empty StateSnapshot: should produce a message and meta, but no outputs.
     async fn test_node_a_run_empty_snapshot() {
         let node = NodeA;
         let snap = StateSnapshot {
@@ -107,6 +108,7 @@ mod tests {
     }
 
     #[tokio::test]
+    /// Checks NodeA's output when run with a non-empty messages list in StateSnapshot.
     async fn test_node_a_run_nonempty_snapshot() {
         let node = NodeA;
         let snap = StateSnapshot {
@@ -127,6 +129,7 @@ mod tests {
     }
 
     #[tokio::test]
+    /// Verifies NodeB's behavior with an empty StateSnapshot: should produce a message, output, and meta.
     async fn test_node_b_run_empty_snapshot() {
         let node = NodeB;
         let snap = StateSnapshot {
@@ -152,6 +155,7 @@ mod tests {
     }
 
     #[tokio::test]
+    /// Checks NodeB's output when run with a non-empty outputs list in StateSnapshot.
     async fn test_node_b_run_nonempty_snapshot() {
         let node = NodeB;
         let snap = StateSnapshot {
@@ -169,6 +173,7 @@ mod tests {
     }
 
     #[test]
+    /// Ensures NodePartial::default() initializes all fields to None.
     fn test_node_partial_default() {
         let np = NodePartial::default();
         assert!(np.messages.is_none());

@@ -63,6 +63,7 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
+    /// Verifies that VersionedState::new_with_user_message initializes all fields correctly with a user message.
     fn test_new_with_user_message() {
         let user_text = "Hello, world!";
         let state = VersionedState::new_with_user_message(user_text);
@@ -78,6 +79,7 @@ mod tests {
     }
 
     #[test]
+    /// Checks that snapshot() produces a StateSnapshot matching the current state values and versions.
     fn test_snapshot_matches_state() {
         let user_text = "Test message";
         let mut state = VersionedState::new_with_user_message(user_text);
@@ -98,6 +100,7 @@ mod tests {
     }
 
     #[test]
+    /// Ensures that StateSnapshot is a deep copy and remains unchanged when the original state is mutated after snapshotting.
     fn test_snapshot_is_deep_copy() {
         let mut state = VersionedState::new_with_user_message("msg");
         let snap = state.snapshot();
@@ -115,6 +118,7 @@ mod tests {
     }
 
     #[test]
+    /// Validates that the Versioned struct stores values and versions correctly for different types.
     fn test_versioned_struct() {
         let v = Versioned {
             value: vec![1, 2, 3],
@@ -139,6 +143,7 @@ mod tests {
     }
 
     #[test]
+    /// Checks that cloning VersionedState produces a deep copy, and mutations to the original do not affect the clone.
     fn test_cloning_versioned_state() {
         let mut state = VersionedState::new_with_user_message("clone me");
         state.outputs.value.push("out".to_string());
