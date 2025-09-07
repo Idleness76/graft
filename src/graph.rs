@@ -9,7 +9,6 @@ pub enum GraphCompileError {
 
 use crate::app::*;
 use crate::node::*;
-use crate::reducer::*;
 use crate::types::*;
 
 pub struct GraphBuilder {
@@ -47,19 +46,14 @@ impl GraphBuilder {
         if !self.nodes.contains_key(entry) {
             return Err(GraphCompileError::EntryNotRegistered(entry.clone()));
         }
-        Ok(App {
-            nodes: self.nodes,
-            edges: self.edges,
-            add_messages: &ADD_MESSAGES,
-            append_outputs: &APPEND_VEC,
-            map_merge: &MAP_MERGE,
-        })
+        Ok(App::from_parts(self.nodes, self.edges))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reducer::*;
 
     #[test]
     /// Verifies that a new GraphBuilder is initialized with empty nodes and edges.
@@ -102,12 +96,12 @@ mod tests {
             .add_edge(NodeKind::Start, NodeKind::End)
             .set_entry(NodeKind::Start);
         let app = gb.compile().unwrap();
-        assert_eq!(app.nodes.len(), 2);
-        assert!(app.nodes.contains_key(&NodeKind::Start));
-        assert!(app.nodes.contains_key(&NodeKind::End));
-        assert_eq!(app.edges.len(), 1);
+        assert_eq!(app.nodes().len(), 2);
+        assert!(app.nodes().contains_key(&NodeKind::Start));
+        assert!(app.nodes().contains_key(&NodeKind::End));
+        assert_eq!(app.edges().len(), 1);
         assert!(
-            app.edges
+            app.edges()
                 .get(&NodeKind::Start)
                 .unwrap()
                 .contains(&NodeKind::End)

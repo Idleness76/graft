@@ -10,15 +10,35 @@ use crate::state::*;
 use crate::types::*;
 
 pub struct App {
-    pub nodes: HashMap<NodeKind, Arc<dyn Node>>,
-    pub edges: HashMap<NodeKind, Vec<NodeKind>>,
-    // Reducers per channel (shared stateless singletons)
+    nodes: HashMap<NodeKind, Arc<dyn Node>>,
+    edges: HashMap<NodeKind, Vec<NodeKind>>,
     pub add_messages: &'static AddMessages,
     pub append_outputs: &'static AppendVec,
     pub map_merge: &'static MapMerge,
 }
 
 impl App {
+    // Internal (crate) factory to build an App while keeping nodes/edges private.
+    pub(crate) fn from_parts(
+        nodes: HashMap<NodeKind, Arc<dyn Node>>,
+        edges: HashMap<NodeKind, Vec<NodeKind>>,
+    ) -> Self {
+        App {
+            nodes,
+            edges,
+            add_messages: &ADD_MESSAGES,
+            append_outputs: &APPEND_VEC,
+            map_merge: &MAP_MERGE,
+        }
+    }
+
+    pub fn nodes(&self) -> &HashMap<NodeKind, Arc<dyn Node>> {
+        &self.nodes
+    }
+
+    pub fn edges(&self) -> &HashMap<NodeKind, Vec<NodeKind>> {
+        &self.edges
+    }
     pub async fn invoke(
         &self,
         initial_state: VersionedState,
@@ -28,7 +48,7 @@ impl App {
 
         // Run A and B in parallel from START, both go to END
         let mut frontier: Vec<NodeKind> = self
-            .edges
+            .edges()
             .get(&NodeKind::Start)
             .cloned()
             .unwrap_or_default();
@@ -70,7 +90,7 @@ impl App {
                 }
                 let id = node_id.clone();
                 run_ids.push(id.clone());
-                let node = self.nodes.get(&id).unwrap().clone();
+                let node = self.nodes().get(&id).unwrap().clone();
                 let ctx = NodeContext {
                     node_id: format!("{:?}", id),
                     step,
@@ -87,7 +107,7 @@ impl App {
             // Compute next frontier
             let mut next = Vec::<NodeKind>::new();
             for id in run_ids.iter() {
-                if let Some(dests) = self.edges.get(id) {
+                if let Some(dests) = self.edges().get(id) {
                     for d in dests {
                         if !next.contains(d) {
                             next.push(d.clone());
