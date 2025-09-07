@@ -33,9 +33,9 @@ impl GraphBuilder {
         App {
             nodes: self.nodes,
             edges: self.edges,
-            add_messages: Arc::new(AddMessages),
-            append_outputs: Arc::new(AppendVec::<String>),
-            map_merge: Arc::new(MapMerge),
+            add_messages: &ADD_MESSAGES,
+            append_outputs: &APPEND_VEC,
+            map_merge: &MAP_MERGE,
         }
     }
 }

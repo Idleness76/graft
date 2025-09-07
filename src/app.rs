@@ -12,14 +12,17 @@ use crate::types::*;
 pub struct App {
     pub nodes: HashMap<NodeKind, Arc<dyn Node>>,
     pub edges: HashMap<NodeKind, Vec<NodeKind>>,
-    // Reducers per channel
-    pub add_messages: Arc<AddMessages>,
-    pub append_outputs: Arc<AppendVec<String>>,
-    pub map_merge: Arc<MapMerge>,
+    // Reducers per channel (shared stateless singletons)
+    pub add_messages: &'static AddMessages,
+    pub append_outputs: &'static AppendVec,
+    pub map_merge: &'static MapMerge,
 }
 
 impl App {
-    pub async fn invoke(&self, initial_state: VersionedState) -> Result<VersionedState> {
+    pub async fn invoke(
+        &self,
+        initial_state: VersionedState,
+    ) -> Result<VersionedState, Box<dyn std::error::Error + Send + Sync>> {
         let state = Arc::new(RwLock::new(initial_state));
         let mut step: u64 = 0;
 
@@ -130,14 +133,15 @@ impl App {
         state: &Arc<RwLock<VersionedState>>,
         run_ids: &[NodeKind],
         node_partials: Vec<NodePartial>,
-    ) -> Result<Vec<&'static str>> {
+    ) -> Result<Vec<&'static str>, Box<dyn std::error::Error + Send + Sync>> {
         // Aggregate per-channel updates first (efficient and deterministic).
         let mut msgs_all: Vec<Message> = Vec::new();
         let mut outs_all: Vec<String> = Vec::new();
         let mut meta_all: HashMap<String, String> = HashMap::new();
 
         for (i, p) in node_partials.iter().enumerate() {
-            let nid = run_ids.get(i).unwrap_or(&NodeKind::Other("?".to_string()));
+            let fallback = NodeKind::Other("?".to_string());
+            let nid = run_ids.get(i).unwrap_or(&fallback);
             if let Some(ms) = &p.messages {
                 println!("  {:?} -> messages: +{}", nid, ms.len());
                 msgs_all.extend(ms.clone());
