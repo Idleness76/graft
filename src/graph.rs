@@ -1,6 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[derive(Debug)]
+pub enum GraphCompileError {
+    MissingEntry,
+    EntryNotRegistered(NodeKind),
+}
+
 use crate::app::*;
 use crate::node::*;
 use crate::reducer::*;
@@ -9,6 +15,7 @@ use crate::types::*;
 pub struct GraphBuilder {
     pub nodes: HashMap<NodeKind, Arc<dyn Node>>,
     pub edges: HashMap<NodeKind, Vec<NodeKind>>,
+    pub entry: Option<NodeKind>,
 }
 
 impl GraphBuilder {
@@ -16,6 +23,7 @@ impl GraphBuilder {
         Self {
             nodes: HashMap::new(),
             edges: HashMap::new(),
+            entry: None,
         }
     }
 
@@ -29,14 +37,23 @@ impl GraphBuilder {
         self
     }
 
-    pub fn compile(self) -> App {
-        App {
+    pub fn set_entry(mut self, entry: NodeKind) -> Self {
+        self.entry = Some(entry);
+        self
+    }
+
+    pub fn compile(self) -> Result<App, GraphCompileError> {
+        let entry = self.entry.as_ref().ok_or(GraphCompileError::MissingEntry)?;
+        if !self.nodes.contains_key(entry) {
+            return Err(GraphCompileError::EntryNotRegistered(entry.clone()));
+        }
+        Ok(App {
             nodes: self.nodes,
             edges: self.edges,
             add_messages: &ADD_MESSAGES,
             append_outputs: &APPEND_VEC,
             map_merge: &MAP_MERGE,
-        }
+        })
     }
 }
 
@@ -82,8 +99,9 @@ mod tests {
         let gb = GraphBuilder::new()
             .add_node(NodeKind::Start, NodeA)
             .add_node(NodeKind::End, NodeB)
-            .add_edge(NodeKind::Start, NodeKind::End);
-        let app = gb.compile();
+            .add_edge(NodeKind::Start, NodeKind::End)
+            .set_entry(NodeKind::Start);
+        let app = gb.compile().unwrap();
         assert_eq!(app.nodes.len(), 2);
         assert!(app.nodes.contains_key(&NodeKind::Start));
         assert!(app.nodes.contains_key(&NodeKind::End));
@@ -98,6 +116,39 @@ mod tests {
         assert!(std::ptr::eq(app.add_messages, &ADD_MESSAGES));
         assert!(std::ptr::eq(app.append_outputs, &APPEND_VEC));
         assert!(std::ptr::eq(app.map_merge, &MAP_MERGE));
+    }
+
+    #[test]
+    /// Compiling without setting entry should return MissingEntry error.
+    fn test_compile_missing_entry() {
+        let gb = GraphBuilder::new()
+            .add_node(NodeKind::Start, NodeA)
+            .add_node(NodeKind::End, NodeB)
+            .add_edge(NodeKind::Start, NodeKind::End);
+        let result = gb.compile();
+        match result {
+            Err(GraphCompileError::MissingEntry) => (),
+            _ => panic!("Expected MissingEntry error"),
+        }
+    }
+
+    #[test]
+    /// Compiling with entry set to a node that is not registered should return EntryNotRegistered error.
+    fn test_compile_entry_not_registered() {
+        let gb = GraphBuilder::new()
+            .add_node(NodeKind::Start, NodeA)
+            .add_node(NodeKind::End, NodeB)
+            .add_edge(NodeKind::Start, NodeKind::End)
+            .set_entry(NodeKind::Other("NotRegistered".to_string()));
+        let result = gb.compile();
+        match result {
+            Err(GraphCompileError::EntryNotRegistered(NodeKind::Other(ref s)))
+                if s == "NotRegistered" =>
+            {
+                ()
+            }
+            _ => panic!("Expected EntryNotRegistered error for 'NotRegistered'"),
+        }
     }
 
     #[test]
