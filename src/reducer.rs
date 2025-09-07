@@ -2,6 +2,11 @@ use std::collections::HashMap;
 
 use crate::message::*;
 
+// Stateless singletons (ZSTs) exposed as &'static for zero allocation reuse
+pub static ADD_MESSAGES: AddMessages = AddMessages;
+pub static APPEND_VEC: AppendVec = AppendVec;
+pub static MAP_MERGE: MapMerge = MapMerge;
+
 pub trait Reducer<V, U>: Send + Sync {
     fn apply(&self, value: &mut V, update: U);
 }
@@ -14,11 +19,13 @@ impl Reducer<Vec<Message>, Vec<Message>> for AddMessages {
     }
 }
 
-// 2) Append vector for outputs
-pub struct AppendVec<T>(pub std::marker::PhantomData<T>);
-impl<T: Clone + Send + Sync + 'static> Reducer<Vec<T>, Vec<T>> for AppendVec<T> {
+// 2) Append vector for outputs (zero-sized; generic only in impl)
+pub struct AppendVec;
+impl<T: Clone + Send + Sync + 'static> Reducer<Vec<T>, Vec<T>> for AppendVec {
     fn apply(&self, value: &mut Vec<T>, update: Vec<T>) {
-        value.extend(update);
+        if !update.is_empty() {
+            value.extend(update);
+        }
     }
 }
 
