@@ -222,3 +222,199 @@ impl App {
         Ok(updated)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_state() -> VersionedState {
+        VersionedState::new_with_user_message("hi")
+    }
+
+    fn make_app() -> App {
+        App {
+            nodes: HashMap::new(),
+            edges: HashMap::new(),
+            add_messages: &ADD_MESSAGES,
+            append_outputs: &APPEND_VEC,
+            map_merge: &MAP_MERGE,
+        }
+    }
+
+    /// Verifies that messages are appended and the version is incremented when a NodePartial with messages is applied.
+    #[tokio::test]
+    async fn test_apply_barrier_messages_update() {
+        let app = make_app();
+        let state = Arc::new(RwLock::new(make_state()));
+        let run_ids = vec![NodeKind::Start];
+        let partial = NodePartial {
+            messages: Some(vec![Message {
+                role: "assistant".into(),
+                content: "foo".into(),
+            }]),
+            outputs: None,
+            meta: None,
+        };
+        let updated = app
+            .apply_barrier(&state, &run_ids, vec![partial])
+            .await
+            .unwrap();
+        let s = state.read().await;
+        assert!(updated.contains(&"messages"));
+        assert_eq!(s.messages.value.last().unwrap().content, "foo");
+        assert_eq!(s.messages.version, 2);
+    }
+
+    /// Verifies that outputs are appended and the version is incremented when a NodePartial with outputs is applied.
+    #[tokio::test]
+    async fn test_apply_barrier_outputs_update() {
+        let app = make_app();
+        let state = Arc::new(RwLock::new(make_state()));
+        let run_ids = vec![NodeKind::Start];
+        let partial = NodePartial {
+            messages: None,
+            outputs: Some(vec!["out1".to_string()]),
+            meta: None,
+        };
+        let updated = app
+            .apply_barrier(&state, &run_ids, vec![partial])
+            .await
+            .unwrap();
+        let s = state.read().await;
+        assert!(updated.contains(&"outputs"));
+        assert_eq!(s.outputs.value.last().unwrap(), "out1");
+        assert_eq!(s.outputs.version, 2);
+    }
+
+    /// Verifies that meta keys are added and overwritten, and the version is incremented when a NodePartial with meta is applied.
+    #[tokio::test]
+    async fn test_apply_barrier_meta_update_and_overwrite() {
+        let app = make_app();
+        let state = Arc::new(RwLock::new(make_state()));
+        {
+            let mut s = state.write().await;
+            s.meta.value.insert("key".to_string(), "old".to_string());
+        }
+        let run_ids = vec![NodeKind::Start];
+        let partial = NodePartial {
+            messages: None,
+            outputs: None,
+            meta: Some(HashMap::from([
+                ("key".to_string(), "new".to_string()),
+                ("another".to_string(), "val".to_string()),
+            ])),
+        };
+        let updated = app
+            .apply_barrier(&state, &run_ids, vec![partial])
+            .await
+            .unwrap();
+        let s = state.read().await;
+        assert!(updated.contains(&"meta"));
+        assert_eq!(s.meta.value.get("key"), Some(&"new".to_string()));
+        assert_eq!(s.meta.value.get("another"), Some(&"val".to_string()));
+        assert_eq!(s.meta.version, 2);
+    }
+
+    /// Verifies that no changes or version bumps occur when a NodePartial with no updates is applied.
+    #[tokio::test]
+    async fn test_apply_barrier_no_update() {
+        let app = make_app();
+        let state = Arc::new(RwLock::new(make_state()));
+        let run_ids = vec![NodeKind::Start];
+        let partial = NodePartial {
+            messages: None,
+            outputs: None,
+            meta: None,
+        };
+        let updated = app
+            .apply_barrier(&state, &run_ids, vec![partial])
+            .await
+            .unwrap();
+        let s = state.read().await;
+        assert!(updated.is_empty());
+        assert_eq!(s.messages.version, 1);
+        assert_eq!(s.outputs.version, 1);
+        assert_eq!(s.meta.version, 1);
+    }
+
+    /// Verifies that the version does not overflow when incrementing from u64::MAX (saturating_add).
+    #[tokio::test]
+    async fn test_apply_barrier_saturating_version() {
+        let app = make_app();
+        let state = Arc::new(RwLock::new(make_state()));
+        {
+            let mut s = state.write().await;
+            s.messages.version = u64::MAX;
+        }
+        let run_ids = vec![NodeKind::Start];
+        let partial = NodePartial {
+            messages: Some(vec![Message {
+                role: "assistant".into(),
+                content: "foo".into(),
+            }]),
+            outputs: None,
+            meta: None,
+        };
+        let _updated = app
+            .apply_barrier(&state, &run_ids, vec![partial])
+            .await
+            .unwrap();
+        let s = state.read().await;
+        assert_eq!(s.messages.version, u64::MAX); // saturating_add
+    }
+
+    /// Verifies that multiple NodePartial updates for the same channel are merged correctly.
+    #[tokio::test]
+    async fn test_apply_barrier_multiple_updates() {
+        let app = make_app();
+        let state = Arc::new(RwLock::new(make_state()));
+        let run_ids = vec![NodeKind::Start, NodeKind::End];
+        let partial1 = NodePartial {
+            messages: Some(vec![Message {
+                role: "assistant".into(),
+                content: "foo".into(),
+            }]),
+            outputs: None,
+            meta: None,
+        };
+        let partial2 = NodePartial {
+            messages: Some(vec![Message {
+                role: "assistant".into(),
+                content: "bar".into(),
+            }]),
+            outputs: None,
+            meta: None,
+        };
+        let updated = app
+            .apply_barrier(&state, &run_ids, vec![partial1, partial2])
+            .await
+            .unwrap();
+        let s = state.read().await;
+        assert!(updated.contains(&"messages"));
+        assert_eq!(s.messages.value[s.messages.value.len() - 2].content, "foo");
+        assert_eq!(s.messages.value[s.messages.value.len() - 1].content, "bar");
+        assert_eq!(s.messages.version, 2);
+    }
+
+    /// Verifies that empty vectors and maps do not cause any changes or version bumps.
+    #[tokio::test]
+    async fn test_apply_barrier_empty_vectors_and_maps() {
+        let app = make_app();
+        let state = Arc::new(RwLock::new(make_state()));
+        let run_ids = vec![NodeKind::Start];
+        let partial = NodePartial {
+            messages: Some(vec![]),
+            outputs: Some(vec![]),
+            meta: Some(HashMap::new()),
+        };
+        let updated = app
+            .apply_barrier(&state, &run_ids, vec![partial])
+            .await
+            .unwrap();
+        let s = state.read().await;
+        assert!(updated.is_empty());
+        assert_eq!(s.messages.version, 1);
+        assert_eq!(s.outputs.version, 1);
+        assert_eq!(s.meta.version, 1);
+    }
+}
