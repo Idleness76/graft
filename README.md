@@ -16,14 +16,13 @@ Graft provides a minimal, extensible runtime for orchestrating nodes (agents) ov
 
 ## Quick Start
 
-```bash
-cargo run --bin demo
-```
+...coming
 
 ## Documentation
 
-- See [`doc/iteration1_demo.md`](doc/iteration1_demo.md) for a detailed architecture overview, roadmap, and design principles.
-- Glossary, roadmap, and open questions are included to guide contributors and future development.
+- See [`doc/iteration1_demo1.md`](doc/iteration1_demo1.md) for a detailed architecture overview, roadmap, and design principles.
+- The documentation folder contains design notes, glossary, roadmap, and open questions to guide contributors and future development.
+- Example code and usage patterns are described in the documentation, but are not runnable as-is.
 
 ## Roadmap
 
