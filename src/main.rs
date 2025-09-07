@@ -1,8 +1,8 @@
+use tokio;
+
 use graft::message::*;
 use graft::node::*;
 use graft::state::*;
-
-use tokio; // Ensure tokio is in your dependencies
 
 #[tokio::main]
 async fn main() {

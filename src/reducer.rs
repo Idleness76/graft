@@ -38,3 +38,74 @@ impl Reducer<HashMap<String, String>, HashMap<String, String>> for MapMerge {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_add_messages_appends() {
+        let mut v = vec![Message {
+            role: "user".into(),
+            content: "a".into(),
+        }];
+        let update = vec![Message {
+            role: "system".into(),
+            content: "b".into(),
+        }];
+        ADD_MESSAGES.apply(&mut v, update);
+        assert_eq!(v.len(), 2);
+        assert_eq!(v[0].role, "user");
+        assert_eq!(v[1].role, "system");
+    }
+
+    #[test]
+    fn test_add_messages_empty_update() {
+        let mut v = vec![Message {
+            role: "user".into(),
+            content: "a".into(),
+        }];
+        let update: Vec<Message> = vec![];
+        ADD_MESSAGES.apply(&mut v, update);
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].role, "user");
+    }
+
+    #[test]
+    fn test_append_vec_appends() {
+        let mut v = vec![1, 2];
+        let update = vec![3, 4];
+        APPEND_VEC.apply(&mut v, update);
+        assert_eq!(v, vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn test_append_vec_empty_update() {
+        let mut v = vec!["a".to_string()];
+        let update: Vec<String> = vec![];
+        APPEND_VEC.apply(&mut v, update);
+        assert_eq!(v, vec!["a"]);
+    }
+
+    #[test]
+    fn test_map_merge_merges_and_overwrites() {
+        let mut map = HashMap::new();
+        map.insert("k1".to_string(), "v1".to_string());
+        let mut update = HashMap::new();
+        update.insert("k2".to_string(), "v2".to_string());
+        update.insert("k1".to_string(), "v3".to_string()); // overwrite
+        MAP_MERGE.apply(&mut map, update);
+        assert_eq!(map.get("k1"), Some(&"v3".to_string()));
+        assert_eq!(map.get("k2"), Some(&"v2".to_string()));
+    }
+
+    #[test]
+    fn test_map_merge_empty_update() {
+        let mut map = HashMap::new();
+        map.insert("k1".to_string(), "v1".to_string());
+        let update: HashMap<String, String> = HashMap::new();
+        MAP_MERGE.apply(&mut map, update);
+        assert_eq!(map.len(), 1);
+        assert_eq!(map.get("k1"), Some(&"v1".to_string()));
+    }
+}

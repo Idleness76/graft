@@ -1,8 +1,8 @@
 # Graft Demo Overview
 
-> Status: Draft  (Initial documentation pass for `src/demo.rs` scaffold)
+> Status: Draft  (Initial documentation pass for `doc/demo1.rs` scaffold)
 
-This document explains the architecture illustrated by `src/demo.rs`, sets shared terminology, and lays out an evolutionary path toward an MVP Rust framework analogous in spirit to Python's LangGraph (graphs of stateful, concurrent, tool‑using agents). It is intentionally explicit so future refactors can align with a documented mental model.
+This document explains the architecture illustrated by `doc/demo1.rs`, sets shared terminology, and lays out an evolutionary path toward an MVP Rust framework analogous in spirit to Python's LangGraph (graphs of stateful, concurrent, tool‑using agents). It is intentionally explicit so future refactors can align with a documented mental model.
 
 ---
 ## 1. High-Level Intent
@@ -173,21 +173,14 @@ Please review & answer to guide next documentation & implementation steps:
 - Expand README to link to this DEMO and highlight roadmap slice.
 
 ---
-## 10. Quick Start (Current Demo)
-```bash
-cargo run --bin demo   # or adjust if binary target renamed
-```
-(At present `demo.rs` is a standalone file; consider moving to `main.rs` or providing example binary target in Cargo.toml.)
-
----
-## 11. Glossary (Growing)
+## 10. Glossary (Growing)
 - Superstep: A synchronous phase where all frontier nodes run against the same snapshot.
 - Frontier: Set of node IDs runnable in the current superstep.
 - Barrier: Merge boundary ensuring deterministic state advancement.
 - Channel: A logical partition of global state with a dedicated reducer.
 
 ---
-## 12. Appendix: Identified Enhancements From Code Review
+## 11. Appendix: Identified Enhancements From Code Review
 | Area | Observation | Action Idea |
 |------|-------------|------------|
 | Error Handling | Uses boxed error & `?` | Introduce `thiserror` enum for core runtime errors. |
