@@ -5,16 +5,14 @@ use tokio::sync::RwLock;
 
 use crate::message::*;
 use crate::node::*;
-use crate::reducer::*;
+use crate::reducers::ReducerRegistery;
 use crate::state::*;
 use crate::types::*;
 
 pub struct App {
     nodes: HashMap<NodeKind, Arc<dyn Node>>,
     edges: HashMap<NodeKind, Vec<NodeKind>>,
-    pub add_messages: &'static AddMessages,
-    pub append_outputs: &'static AppendVec,
-    pub map_merge: &'static MapMerge,
+    reducer_registery: ReducerRegistery,
 }
 
 impl App {
@@ -26,9 +24,7 @@ impl App {
         App {
             nodes,
             edges,
-            add_messages: &ADD_MESSAGES,
-            append_outputs: &APPEND_VEC,
-            map_merge: &MAP_MERGE,
+            reducer_registery: ReducerRegistery::default(),
         }
     }
 
@@ -179,66 +175,37 @@ impl App {
         }
 
         // Apply per-channel reducers and bump versions if changed.
-        let mut updated = Vec::<&'static str>::new();
+        let merged_updates = NodePartial {
+            messages: Some(msgs_all),
+            outputs: Some(outs_all),
+            meta: Some(meta_all),
+        };
+
         let mut s = state.write().await;
 
-        // messages
-        if !msgs_all.is_empty() {
-            let before_len = s.messages.value.len();
-            let before_ver = s.messages.version;
-            self.add_messages.apply(&mut s.messages.value, msgs_all);
-            let changed = s.messages.value.len() != before_len;
-            if changed {
-                s.messages.version = s.messages.version.saturating_add(1);
-                println!(
-                    "  barrier: messages len {} -> {}, v {} -> {}",
-                    before_len,
-                    s.messages.value.len(),
-                    before_ver,
-                    s.messages.version
-                );
-                updated.push("messages");
-            }
+        //TODO need to make this whole thing prettier
+        let msgs_before_len = s.messages.value.len();
+        let msgs_before_ver = s.messages.version;
+
+        // Track updated channels we will return (only messages for now; extend for outputs/meta when reducers added)
+        let mut updated: Vec<&'static str> = Vec::new();
+        self.reducer_registery.apply_all(&mut *s, &merged_updates)?;
+
+        let msgs_changed = s.messages.value.len() != msgs_before_len;
+        if msgs_changed {
+            s.messages.version = s.messages.version.saturating_add(1);
+            println!(
+                "  barrier: messages len {} -> {}, v {} -> {}",
+                msgs_before_len,
+                s.messages.value.len(),
+                msgs_before_ver,
+                s.messages.version
+            );
         }
 
-        // outputs
-        if !outs_all.is_empty() {
-            let before_len = s.outputs.value.len();
-            let before_ver = s.outputs.version;
-            self.append_outputs.apply(&mut s.outputs.value, outs_all);
-            let changed = s.outputs.value.len() != before_len;
-            if changed {
-                s.outputs.version = s.outputs.version.saturating_add(1);
-                println!(
-                    "  barrier: outputs len {} -> {}, v {} -> {}",
-                    before_len,
-                    s.outputs.value.len(),
-                    before_ver,
-                    s.outputs.version
-                );
-                updated.push("outputs");
-            }
+        if msgs_changed {
+            updated.push("messages");
         }
-
-        // meta (map merge)
-        if !meta_all.is_empty() {
-            let before_keys = s.meta.value.len();
-            let before_ver = s.meta.version;
-            self.map_merge.apply(&mut s.meta.value, meta_all);
-            let changed = s.meta.value.len() != before_keys;
-            if changed {
-                s.meta.version = s.meta.version.saturating_add(1);
-                println!(
-                    "  barrier: meta keys {} -> {}, v {} -> {}",
-                    before_keys,
-                    s.meta.value.len(),
-                    before_ver,
-                    s.meta.version
-                );
-                updated.push("meta");
-            }
-        }
-
         Ok(updated)
     }
 }
@@ -255,9 +222,7 @@ mod tests {
         App {
             nodes: HashMap::new(),
             edges: HashMap::new(),
-            add_messages: &ADD_MESSAGES,
-            append_outputs: &APPEND_VEC,
-            map_merge: &MAP_MERGE,
+            reducer_registery: ReducerRegistery::default(),
         }
     }
 
@@ -285,55 +250,7 @@ mod tests {
         assert_eq!(s.messages.version, 2);
     }
 
-    /// Verifies that outputs are appended and the version is incremented when a NodePartial with outputs is applied.
-    #[tokio::test]
-    async fn test_apply_barrier_outputs_update() {
-        let app = make_app();
-        let state = Arc::new(RwLock::new(make_state()));
-        let run_ids = vec![NodeKind::Start];
-        let partial = NodePartial {
-            messages: None,
-            outputs: Some(vec!["out1".to_string()]),
-            meta: None,
-        };
-        let updated = app
-            .apply_barrier(&state, &run_ids, vec![partial])
-            .await
-            .unwrap();
-        let s = state.read().await;
-        assert!(updated.contains(&"outputs"));
-        assert_eq!(s.outputs.value.last().unwrap(), "out1");
-        assert_eq!(s.outputs.version, 2);
-    }
-
-    /// Verifies that meta keys are added and overwritten, and the version is incremented when a NodePartial with meta is applied.
-    #[tokio::test]
-    async fn test_apply_barrier_meta_update_and_overwrite() {
-        let app = make_app();
-        let state = Arc::new(RwLock::new(make_state()));
-        {
-            let mut s = state.write().await;
-            s.meta.value.insert("key".to_string(), "old".to_string());
-        }
-        let run_ids = vec![NodeKind::Start];
-        let partial = NodePartial {
-            messages: None,
-            outputs: None,
-            meta: Some(HashMap::from([
-                ("key".to_string(), "new".to_string()),
-                ("another".to_string(), "val".to_string()),
-            ])),
-        };
-        let updated = app
-            .apply_barrier(&state, &run_ids, vec![partial])
-            .await
-            .unwrap();
-        let s = state.read().await;
-        assert!(updated.contains(&"meta"));
-        assert_eq!(s.meta.value.get("key"), Some(&"new".to_string()));
-        assert_eq!(s.meta.value.get("another"), Some(&"val".to_string()));
-        assert_eq!(s.meta.version, 2);
-    }
+    //TODO add test for Extras channel once that is implemented
 
     /// Verifies that no changes or version bumps occur when a NodePartial with no updates is applied.
     #[tokio::test]

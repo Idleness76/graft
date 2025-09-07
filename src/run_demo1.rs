@@ -5,7 +5,6 @@ pub async fn run_demo1() -> anyhow::Result<()> {
     use super::graph::GraphBuilder;
     use super::message::Message;
     use super::node::{NodeA, NodeB, NodePartial};
-    use super::reducer::{ADD_MESSAGES, APPEND_VEC, MAP_MERGE, Reducer};
     use super::state::VersionedState;
     use super::types::NodeKind;
 
@@ -59,31 +58,9 @@ pub async fn run_demo1() -> anyhow::Result<()> {
         snap_after.messages_version
     );
 
-    // 5. Direct reducer usage
-    let mut demo_messages = vec![Message {
-        role: "user".into(),
-        content: "m1".into(),
-    }];
-    ADD_MESSAGES.apply(
-        &mut demo_messages,
-        vec![Message {
-            role: "assistant".into(),
-            content: "m2".into(),
-        }],
-    );
-    let mut demo_outputs = vec!["o1".to_string()];
-    APPEND_VEC.apply(&mut demo_outputs, vec!["o2".into(), "o3".into()]);
-    let mut demo_meta = HashMap::from([("k1".into(), "v1".into())]);
-    MAP_MERGE.apply(
-        &mut demo_meta,
-        HashMap::from([("k2".into(), "v2".into()), ("k1".into(), "v1b".into())]),
-    );
-    println!(
-        "Reducer demo: msgs={}, outs={}, meta={:?}",
-        demo_messages.len(),
-        demo_outputs.len(),
-        demo_meta
-    );
+    // 5. (Removed) Direct reducer usage with legacy per-channel APIs.
+    // Reducers are now applied via the ReducerRegistery inside barrier logic.
+    // Proceed to manual barrier scenarios below.
 
     // 6. Manual barrier scenarios
     // a) Mixed updates

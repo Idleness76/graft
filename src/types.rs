@@ -4,3 +4,10 @@ pub enum NodeKind {
     End,
     Other(String),
 }
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ChannelType {
+    Message,
+    Error,
+    Extra,
+}
