@@ -86,6 +86,8 @@ mod tests {
     /// Verifies NodeA's behavior when run with an empty StateSnapshot: should produce a message and meta, but no outputs.
     async fn test_node_a_run_empty_snapshot() {
         let node = NodeA;
+        let mut extra = HashMap::new();
+        extra.insert("test_key".to_string(), serde_json::json!("test_value"));
         let snap = StateSnapshot {
             messages: vec![],
             messages_version: 1,
@@ -93,6 +95,8 @@ mod tests {
             outputs_version: 1,
             meta: HashMap::new(),
             meta_version: 1,
+            extra: extra.clone(),
+            extra_version: 1,
         };
         let ctx = make_ctx(5);
         let result = node.run(snap.clone(), ctx.clone()).await;
@@ -105,12 +109,19 @@ mod tests {
         let meta = result.meta.as_ref().unwrap();
         assert_eq!(meta.get("source"), Some(&"A".to_string()));
         assert_eq!(meta.get("hint"), Some(&"alpha".to_string()));
+        // Assert extra field is preserved in snapshot
+        assert_eq!(
+            snap.extra.get("test_key"),
+            Some(&serde_json::json!("test_value"))
+        );
     }
 
     #[tokio::test]
     /// Checks NodeA's output when run with a non-empty messages list in StateSnapshot.
     async fn test_node_a_run_nonempty_snapshot() {
         let node = NodeA;
+        let mut extra = HashMap::new();
+        extra.insert("foo".to_string(), serde_json::json!([1, 2, 3]));
         let snap = StateSnapshot {
             messages: vec![Message {
                 role: "user".into(),
@@ -121,17 +132,23 @@ mod tests {
             outputs_version: 1,
             meta: HashMap::new(),
             meta_version: 1,
+            extra: extra.clone(),
+            extra_version: 1,
         };
         let ctx = make_ctx(7);
         let result = node.run(snap.clone(), ctx.clone()).await;
         let msg = &result.messages.as_ref().unwrap()[0];
         assert_eq!(msg.content, "A saw 1 msgs at step 7");
+        // Assert extra field is preserved in snapshot
+        assert_eq!(snap.extra.get("foo"), Some(&serde_json::json!([1, 2, 3])));
     }
 
     #[tokio::test]
     /// Verifies NodeB's behavior with an empty StateSnapshot: should produce a message, output, and meta.
     async fn test_node_b_run_empty_snapshot() {
         let node = NodeB;
+        let mut extra = HashMap::new();
+        extra.insert("bar".to_string(), serde_json::json!({"baz": true}));
         let snap = StateSnapshot {
             messages: vec![],
             messages_version: 1,
@@ -139,6 +156,8 @@ mod tests {
             outputs_version: 1,
             meta: HashMap::new(),
             meta_version: 1,
+            extra: extra.clone(),
+            extra_version: 1,
         };
         let ctx = make_ctx(3);
         let result = node.run(snap.clone(), ctx.clone()).await;
@@ -152,12 +171,19 @@ mod tests {
         assert!(result.meta.is_some());
         let meta = result.meta.as_ref().unwrap();
         assert_eq!(meta.get("tag"), Some(&"beta".to_string()));
+        // Assert extra field is preserved in snapshot
+        assert_eq!(
+            snap.extra.get("bar"),
+            Some(&serde_json::json!({"baz": true}))
+        );
     }
 
     #[tokio::test]
     /// Checks NodeB's output when run with a non-empty outputs list in StateSnapshot.
     async fn test_node_b_run_nonempty_snapshot() {
         let node = NodeB;
+        let mut extra = HashMap::new();
+        extra.insert("arr".to_string(), serde_json::json!(["x", "y"]));
         let snap = StateSnapshot {
             messages: vec![],
             messages_version: 1,
@@ -165,11 +191,42 @@ mod tests {
             outputs_version: 2,
             meta: HashMap::new(),
             meta_version: 1,
+            extra: extra.clone(),
+            extra_version: 1,
         };
         let ctx = make_ctx(8);
         let result = node.run(snap.clone(), ctx.clone()).await;
         let out = &result.outputs.as_ref().unwrap()[0];
         assert_eq!(out, "B adding output, prior outs=2");
+        // Assert extra field is preserved in snapshot
+        assert_eq!(snap.extra.get("arr"), Some(&serde_json::json!(["x", "y"])));
+    }
+
+    #[test]
+    /// Verifies that the extra field in StateSnapshot can store and retrieve flexible data types
+    /// using serde_json::Value, including numbers, strings, arrays, and objects. This ensures that
+    /// the node state model supports arbitrary extension data as required by the project specification.
+    fn test_snapshot_extra_flexible_types() {
+        use serde_json::json;
+        let mut extra = HashMap::new();
+        extra.insert("number".to_string(), json!(123));
+        extra.insert("text".to_string(), json!("abc"));
+        extra.insert("array".to_string(), json!([1, 2, 3]));
+        extra.insert("obj".to_string(), json!({"foo": "bar"}));
+        let snap = StateSnapshot {
+            messages: vec![],
+            messages_version: 1,
+            outputs: vec![],
+            outputs_version: 1,
+            meta: HashMap::new(),
+            meta_version: 1,
+            extra: extra.clone(),
+            extra_version: 1,
+        };
+        assert_eq!(snap.extra["number"], json!(123));
+        assert_eq!(snap.extra["text"], json!("abc"));
+        assert_eq!(snap.extra["array"], json!([1, 2, 3]));
+        assert_eq!(snap.extra["obj"], json!({"foo": "bar"}));
     }
 
     #[test]

@@ -175,6 +175,7 @@ mod tests {
         assert_ne!(cloned.meta.value, state.meta.value);
     }
 
+    #[test]
     /// Verifies that the `extra` field in VersionedState can store and retrieve flexible data types
     /// using serde_json::Value, including numbers, strings, and arrays. This ensures that the state
     /// model supports arbitrary extension data as required by the project specification.
