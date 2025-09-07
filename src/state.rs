@@ -1,5 +1,7 @@
-use crate::message::*;
+use serde_json::Value;
 use std::collections::HashMap;
+
+use crate::message::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Versioned<T> {
@@ -12,6 +14,19 @@ pub struct VersionedState {
     pub messages: Versioned<Vec<Message>>,
     pub outputs: Versioned<Vec<String>>,
     pub meta: Versioned<HashMap<String, String>>,
+    pub extra: Versioned<HashMap<String, Value>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct StateSnapshot {
+    pub messages: Vec<Message>,
+    pub messages_version: u64,
+    pub outputs: Vec<String>,
+    pub outputs_version: u64,
+    pub meta: HashMap<String, String>,
+    pub meta_version: u64,
+    pub extra: HashMap<String, Value>,
+    pub extra_version: u64,
 }
 
 impl VersionedState {
@@ -32,6 +47,10 @@ impl VersionedState {
                 value: HashMap::new(),
                 version: 1,
             },
+            extra: Versioned {
+                value: HashMap::new(),
+                version: 1,
+            },
         }
     }
 
@@ -43,18 +62,10 @@ impl VersionedState {
             outputs_version: self.outputs.version,
             meta: self.meta.value.clone(),
             meta_version: self.meta.version,
+            extra: self.extra.value.clone(),
+            extra_version: self.extra.version,
         }
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct StateSnapshot {
-    pub messages: Vec<Message>,
-    pub messages_version: u64,
-    pub outputs: Vec<String>,
-    pub outputs_version: u64,
-    pub meta: HashMap<String, String>,
-    pub meta_version: u64,
 }
 
 #[cfg(test)]
@@ -162,5 +173,27 @@ mod tests {
         assert_ne!(cloned.messages.value, state.messages.value);
         assert_ne!(cloned.outputs.value, state.outputs.value);
         assert_ne!(cloned.meta.value, state.meta.value);
+    }
+
+    #[test]
+    /// Verifies that the `extra` field in VersionedState can store and retrieve flexible data types
+    /// using serde_json::Value, including numbers, strings, and arrays. This ensures that the state
+    /// model supports arbitrary extension data as required by the project specification.
+    fn test_extra_flexible_types() {
+        use serde_json::json;
+        let mut state = VersionedState::new_with_user_message("test");
+        // Insert a number
+        state.extra.value.insert("number".to_string(), json!(123));
+        // Insert a string
+        state.extra.value.insert("text".to_string(), json!("abc"));
+        // Insert an array
+        state
+            .extra
+            .value
+            .insert("array".to_string(), json!([1, 2, 3]));
+        // Assert retrieval matches what was inserted
+        assert_eq!(state.extra.value["number"], json!(123));
+        assert_eq!(state.extra.value["text"], json!("abc"));
+        assert_eq!(state.extra.value["array"], json!([1, 2, 3]));
     }
 }

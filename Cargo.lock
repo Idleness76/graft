@@ -371,6 +371,7 @@ dependencies = [
  "async-trait",
  "futures",
  "rig-core",
+ "serde_json",
  "tokio",
 ]
 

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use tokio;
 
 use graft::message::*;
@@ -15,8 +16,10 @@ async fn main() {
         messages_version: 1,
         outputs: vec![],
         outputs_version: 1,
-        meta: std::collections::HashMap::new(),
+        meta: HashMap::new(),
         meta_version: 1,
+        extra: HashMap::new(),
+        extra_version: 1,
     };
 
     // Create a NodeContext
