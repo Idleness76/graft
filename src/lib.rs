@@ -1,4 +1,5 @@
 pub mod app;
+pub mod channels;
 pub mod graph;
 pub mod message;
 pub mod node;

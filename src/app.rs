@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::channels::Channel;
 use crate::message::*;
 use crate::node::*;
 use crate::reducers::ReducerRegistery;
@@ -126,10 +127,10 @@ impl App {
         println!("\n== Final state ==");
         let final_state = Arc::try_unwrap(state).expect("borrowed").into_inner();
 
-        for (i, m) in final_state.messages.value.iter().enumerate() {
+        for (i, m) in final_state.messages.snapshot().iter().enumerate() {
             println!("#{:02} [{}] {}", i, m.role, m.content);
         }
-        println!("messages.version = {}", final_state.messages.version);
+        println!("messages.version = {}", final_state.messages.version());
 
         println!("outputs (v {}):", final_state.outputs.version);
         for (i, o) in final_state.outputs.value.iter().enumerate() {
@@ -184,22 +185,22 @@ impl App {
         let mut s = state.write().await;
 
         //TODO need to make this whole thing prettier
-        let msgs_before_len = s.messages.value.len();
-        let msgs_before_ver = s.messages.version;
+        let msgs_before_len = s.messages.len();
+        let msgs_before_ver = s.messages.version();
 
         // Track updated channels we will return (only messages for now; extend for outputs/meta when reducers added)
         let mut updated: Vec<&'static str> = Vec::new();
         self.reducer_registery.apply_all(&mut *s, &merged_updates)?;
 
-        let msgs_changed = s.messages.value.len() != msgs_before_len;
+        let msgs_changed = s.messages.len() != msgs_before_len;
         if msgs_changed {
-            s.messages.version = s.messages.version.saturating_add(1);
+            s.messages.set_version(msgs_before_ver.saturating_add(1));
             println!(
                 "  barrier: messages len {} -> {}, v {} -> {}",
                 msgs_before_len,
-                s.messages.value.len(),
+                s.messages.len(),
                 msgs_before_ver,
-                s.messages.version
+                s.messages.version()
             );
         }
 
@@ -246,8 +247,8 @@ mod tests {
             .unwrap();
         let s = state.read().await;
         assert!(updated.contains(&"messages"));
-        assert_eq!(s.messages.value.last().unwrap().content, "foo");
-        assert_eq!(s.messages.version, 2);
+        assert_eq!(s.messages.snapshot().last().unwrap().content, "foo");
+        assert_eq!(s.messages.version(), 2);
     }
 
     //TODO add test for Extras channel once that is implemented
@@ -269,7 +270,7 @@ mod tests {
             .unwrap();
         let s = state.read().await;
         assert!(updated.is_empty());
-        assert_eq!(s.messages.version, 1);
+        assert_eq!(s.messages.version(), 1);
         assert_eq!(s.outputs.version, 1);
         assert_eq!(s.meta.version, 1);
     }
@@ -281,7 +282,7 @@ mod tests {
         let state = Arc::new(RwLock::new(make_state()));
         {
             let mut s = state.write().await;
-            s.messages.version = u64::MAX;
+            s.messages.set_version(u32::MAX);
         }
         let run_ids = vec![NodeKind::Start];
         let partial = NodePartial {
@@ -297,7 +298,7 @@ mod tests {
             .await
             .unwrap();
         let s = state.read().await;
-        assert_eq!(s.messages.version, u64::MAX); // saturating_add
+        assert_eq!(s.messages.version(), u32::MAX); // saturating_add
     }
 
     /// Verifies that multiple NodePartial updates for the same channel are merged correctly.
@@ -327,10 +328,17 @@ mod tests {
             .await
             .unwrap();
         let s = state.read().await;
+        let messages_snapshot = s.messages.snapshot();
         assert!(updated.contains(&"messages"));
-        assert_eq!(s.messages.value[s.messages.value.len() - 2].content, "foo");
-        assert_eq!(s.messages.value[s.messages.value.len() - 1].content, "bar");
-        assert_eq!(s.messages.version, 2);
+        assert_eq!(
+            messages_snapshot[messages_snapshot.len() - 2].content,
+            "foo"
+        );
+        assert_eq!(
+            messages_snapshot[messages_snapshot.len() - 1].content,
+            "bar"
+        );
+        assert_eq!(s.messages.version(), 2);
     }
 
     /// Verifies that empty vectors and maps do not cause any changes or version bumps.
@@ -350,7 +358,7 @@ mod tests {
             .unwrap();
         let s = state.read().await;
         assert!(updated.is_empty());
-        assert_eq!(s.messages.version, 1);
+        assert_eq!(s.messages.version(), 1);
         assert_eq!(s.outputs.version, 1);
         assert_eq!(s.meta.version, 1);
     }

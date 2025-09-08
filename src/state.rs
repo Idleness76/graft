@@ -1,17 +1,20 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::message::*;
+use crate::{
+    channels::{Channel, MessagesChannel},
+    message::*,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Versioned<T> {
     pub value: T,
-    pub version: u64,
+    pub version: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VersionedState {
-    pub messages: Versioned<Vec<Message>>,
+    pub messages: MessagesChannel,
     pub outputs: Versioned<Vec<String>>,
     pub meta: Versioned<HashMap<String, String>>,
     pub extra: Versioned<HashMap<String, Value>>,
@@ -20,25 +23,24 @@ pub struct VersionedState {
 #[derive(Clone, Debug)]
 pub struct StateSnapshot {
     pub messages: Vec<Message>,
-    pub messages_version: u64,
+    pub messages_version: u32,
     pub outputs: Vec<String>,
-    pub outputs_version: u64,
+    pub outputs_version: u32,
     pub meta: HashMap<String, String>,
-    pub meta_version: u64,
+    pub meta_version: u32,
     pub extra: HashMap<String, Value>,
-    pub extra_version: u64,
+    pub extra_version: u32,
 }
 
 impl VersionedState {
     pub fn new_with_user_message(user_text: &str) -> Self {
+        let messages = vec![Message {
+            role: "user".into(),
+            content: user_text.into(),
+        }];
+
         Self {
-            messages: Versioned {
-                value: vec![Message {
-                    role: "user".into(),
-                    content: user_text.into(),
-                }],
-                version: 1,
-            },
+            messages: MessagesChannel::new(messages, 1),
             outputs: Versioned {
                 value: Vec::new(),
                 version: 1,
@@ -56,8 +58,8 @@ impl VersionedState {
 
     pub fn snapshot(&self) -> StateSnapshot {
         StateSnapshot {
-            messages: self.messages.value.clone(),
-            messages_version: self.messages.version,
+            messages: self.messages.snapshot(),
+            messages_version: self.messages.version(),
             outputs: self.outputs.value.clone(),
             outputs_version: self.outputs.version,
             meta: self.meta.value.clone(),
@@ -78,11 +80,12 @@ mod tests {
     fn test_new_with_user_message() {
         let user_text = "Hello, world!";
         let state = VersionedState::new_with_user_message(user_text);
-        assert_eq!(state.messages.value.len(), 1);
-        let msg = &state.messages.value[0];
+        let messages_snapshot = state.messages.snapshot();
+        assert_eq!(messages_snapshot.len(), 1);
+        let msg = &messages_snapshot[0];
         assert_eq!(msg.role, "user");
         assert_eq!(msg.content, user_text);
-        assert_eq!(state.messages.version, 1);
+        assert_eq!(state.messages.version(), 1);
         assert!(state.outputs.value.is_empty());
         assert_eq!(state.outputs.version, 1);
         assert!(state.meta.value.is_empty());
@@ -102,8 +105,8 @@ mod tests {
             .insert("key".to_string(), "value".to_string());
         state.meta.version = 3;
         let snap = state.snapshot();
-        assert_eq!(snap.messages, state.messages.value);
-        assert_eq!(snap.messages_version, state.messages.version);
+        assert_eq!(snap.messages, state.messages.snapshot());
+        assert_eq!(snap.messages_version, state.messages.version());
         assert_eq!(snap.outputs, state.outputs.value);
         assert_eq!(snap.outputs_version, state.outputs.version);
         assert_eq!(snap.meta, state.meta.value);
@@ -116,7 +119,7 @@ mod tests {
         let mut state = VersionedState::new_with_user_message("msg");
         let snap = state.snapshot();
         // Mutate state after snapshot
-        state.messages.value[0].content = "changed".to_string();
+        state.messages.snapshot()[0].content = "changed".to_string();
         state.outputs.value.push("new_output".to_string());
         state
             .meta
@@ -159,18 +162,19 @@ mod tests {
         let mut state = VersionedState::new_with_user_message("clone me");
         state.outputs.value.push("out".to_string());
         state.meta.value.insert("x".to_string(), "y".to_string());
+        let messages_snapshot = state.messages.snapshot();
         let cloned = state.clone();
-        assert_eq!(cloned.messages.value, state.messages.value);
+        assert_eq!(cloned.messages.snapshot(), messages_snapshot);
         assert_eq!(cloned.outputs.value, state.outputs.value);
         assert_eq!(cloned.meta.value, state.meta.value);
         // Mutate original, cloned should not change
-        state.messages.value[0].content = "changed".to_string();
+        state.messages.get_mut()[0].content = "changed".to_string();
         state.outputs.value.push("new".to_string());
         state
             .meta
             .value
             .insert("foo".to_string(), "bar".to_string());
-        assert_ne!(cloned.messages.value, state.messages.value);
+        assert_ne!(cloned.messages.snapshot(), state.messages.snapshot());
         assert_ne!(cloned.outputs.value, state.outputs.value);
         assert_ne!(cloned.meta.value, state.meta.value);
     }
