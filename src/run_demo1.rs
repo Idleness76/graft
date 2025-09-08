@@ -1,3 +1,7 @@
+use std::u32;
+
+use crate::channels::Channel;
+
 pub async fn run_demo1() -> anyhow::Result<()> {
     use serde_json::json;
     use std::collections::HashMap;
@@ -46,11 +50,13 @@ pub async fn run_demo1() -> anyhow::Result<()> {
     );
     // Mutate clone (not affecting prior snapshot)
     let mut mutated = final_state.clone();
-    mutated.messages.value.push(Message {
+    mutated.messages.get_mut().push(Message {
         role: "assistant".into(),
         content: "post-run note".into(),
     });
-    mutated.messages.version += 1;
+    mutated
+        .messages
+        .set_version(snap_before.messages_version + 1);
     let snap_after = mutated.snapshot();
     println!(
         "Snapshot after mutation: messages={}, version={}",
@@ -111,7 +117,7 @@ pub async fn run_demo1() -> anyhow::Result<()> {
     // c) Saturating version test
     {
         let mut lock = state_arc.write().await;
-        lock.messages.version = u64::MAX;
+        lock.messages.set_version(u32::MAX);
     }
     let _ = app
         .apply_barrier(
@@ -130,7 +136,10 @@ pub async fn run_demo1() -> anyhow::Result<()> {
         .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
     {
         let lock = state_arc.read().await;
-        println!("Saturating test messages.version={}", lock.messages.version);
+        println!(
+            "Saturating test messages.version={}",
+            lock.messages.version()
+        );
     }
 
     // 7. GraphBuilder error demonstrations

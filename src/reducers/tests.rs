@@ -4,6 +4,7 @@ use std::collections::HashMap;
 mod tests {
     use super::*;
     use crate::{
+        channels::Channel,
         message::Message,
         node::NodePartial,
         reducers::{AddMessages, MapMerge, Reducer, ReducerRegistery, ReducerType},
@@ -37,7 +38,7 @@ mod tests {
     fn test_add_messages_appends_state() {
         let reducer = AddMessages;
         let mut state = base_state();
-        let initial_version = state.messages.version;
+        let initial_version = state.messages.version();
 
         let partial = NodePartial {
             messages: Some(vec![Message {
@@ -50,19 +51,20 @@ mod tests {
 
         reducer.apply(&mut state, &partial);
 
-        assert_eq!(state.messages.value.len(), 2);
-        assert_eq!(state.messages.value[0].role, "user");
-        assert_eq!(state.messages.value[1].role, "system");
+        let messages_snapshot = state.messages.snapshot();
+        assert_eq!(messages_snapshot.len(), 2);
+        assert_eq!(messages_snapshot[0].role, "user");
+        assert_eq!(messages_snapshot[1].role, "system");
         // Version bump is now the barrier's responsibility (reducers no longer bump versions)
-        assert_eq!(state.messages.version, initial_version);
+        assert_eq!(state.messages.version(), initial_version);
     }
 
     #[test]
     fn test_add_messages_empty_partial_noop() {
         let reducer = AddMessages;
         let mut state = base_state();
-        let initial_len = state.messages.value.len();
-        let initial_version = state.messages.version;
+        let initial_len = state.messages.snapshot().len();
+        let initial_version = state.messages.version();
 
         let partial = NodePartial {
             messages: Some(vec![]),
@@ -72,8 +74,9 @@ mod tests {
 
         reducer.apply(&mut state, &partial);
 
-        assert_eq!(state.messages.value.len(), initial_len);
-        assert_eq!(state.messages.version, initial_version);
+        let messages_snapshot = state.messages.snapshot();
+        assert_eq!(messages_snapshot.len(), initial_len);
+        assert_eq!(state.messages.version(), initial_version);
     }
 
     #[test]
@@ -151,7 +154,7 @@ mod tests {
             r.apply(&mut state, &partial);
         }
 
-        assert_eq!(state.messages.value.len(), 2);
+        assert_eq!(state.messages.snapshot().len(), 2);
         assert_eq!(state.meta.value.get("seed"), Some(&"y".to_string()));
     }
 
@@ -212,7 +215,7 @@ mod tests {
         assert!(
             state
                 .messages
-                .value
+                .snapshot()
                 .iter()
                 .any(|m| m.content == "from node")
         );
