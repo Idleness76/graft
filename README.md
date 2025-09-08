@@ -6,6 +6,110 @@ A Rust-based framework for building graph-driven, concurrent agent workflows—a
 
 Graft provides a minimal, extensible runtime for orchestrating nodes (agents) over a directed graph, with versioned state channels and deterministic barrier merges. It’s designed for LLM and tool orchestration, but general enough for broader dataflow and actor-style applications.
 
+Dream final state architectural flow chart
+```mermaid
+
+flowchart TB
+
+subgraph Client
+  user[Client App or UI]
+end
+
+subgraph Build
+  gb[GraphBuilder]
+end
+
+subgraph Graph
+  cg[CompiledGraph]
+end
+
+subgraph Runtime
+  app[App]
+  sched[Scheduler]
+  router[Router Edges and Commands]
+  barrier[Barrier Applier]
+end
+
+subgraph Nodes
+  usernode[User Nodes]
+  llmnode[LLM Node]
+  toolnode[Tool Node]
+end
+
+subgraph State
+  vstate[Versioned State]
+  snap[State Snapshot]
+end
+
+subgraph Reducers
+  redreg[Reducer Registry]
+end
+
+subgraph Checkpoint
+  cpif[Checkpointer]
+end
+
+subgraph Rig
+  rigad[Rig Adapter]
+  llmprov[LLM Provider]
+end
+
+subgraph Tools
+  toolreg[Tool Registry]
+  exttools[External Tools]
+end
+
+subgraph Stream
+  stream[Stream Controller]
+end
+
+subgraph Viz
+  viz[Visualizer]
+end
+
+
+user --> gb
+gb --> cg
+
+user --> app
+cg --> app
+
+app --> sched
+sched --> snap
+vstate --> snap
+
+sched --> usernode
+sched --> llmnode
+sched --> toolnode
+
+usernode --> barrier
+llmnode --> barrier
+toolnode --> barrier
+redreg --> barrier
+barrier --> vstate
+
+snap --> router
+app --> router
+router --> sched
+
+llmnode --> rigad
+rigad --> llmprov
+llmprov --> rigad
+rigad --> llmnode
+
+toolnode --> toolreg
+toolnode --> exttools
+exttools --> toolnode
+
+barrier --> cpif
+
+app --> stream
+stream --> user
+
+cg --> viz
+
+```
+
 ## Features
 
 - **Versioned, channelized state** (messages, outputs, meta)
