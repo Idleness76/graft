@@ -5,6 +5,7 @@ pub mod message;
 pub mod node;
 pub mod reducers;
 pub mod run_demo1;
+pub mod run_demo2;
 pub mod schedulers;
 pub mod state;
 pub mod types;
