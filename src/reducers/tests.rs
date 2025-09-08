@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
+use serde_json::Value;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::channels::Channel;
     use crate::{
-        channels::Channel,
         message::Message,
         node::NodePartial,
         reducers::{AddMessages, MapMerge, Reducer, ReducerRegistery, ReducerType},
@@ -12,12 +13,12 @@ mod tests {
         types::ChannelType,
     };
 
-    // Helper to build a fresh VersionedState with a single user message.
+    // Fresh baseline state helper
     fn base_state() -> VersionedState {
         VersionedState::new_with_user_message("a")
     }
 
-    // Guard function prototype (mirrors what we'd add to runtime code)
+    // Local guard prototype mirroring runtime logic
     fn channel_guard(channel: ChannelType, partial: &NodePartial) -> bool {
         match channel {
             ChannelType::Message => partial
@@ -26,36 +27,40 @@ mod tests {
                 .map(|v| !v.is_empty())
                 .unwrap_or(false),
             ChannelType::Extra => partial
-                .meta
+                .extra
                 .as_ref()
                 .map(|m| !m.is_empty())
                 .unwrap_or(false),
-            ChannelType::Error => false, // not handled yet
+            ChannelType::Error => false,
         }
     }
+
+    /********************
+     * AddMessages tests
+     ********************/
 
     #[test]
     fn test_add_messages_appends_state() {
         let reducer = AddMessages;
         let mut state = base_state();
         let initial_version = state.messages.version();
+        let initial_len = state.messages.snapshot().len();
 
         let partial = NodePartial {
             messages: Some(vec![Message {
                 role: "system".into(),
                 content: "b".into(),
             }]),
-            outputs: None,
-            meta: None,
+            extra: None,
         };
 
         reducer.apply(&mut state, &partial);
 
-        let messages_snapshot = state.messages.snapshot();
-        assert_eq!(messages_snapshot.len(), 2);
-        assert_eq!(messages_snapshot[0].role, "user");
-        assert_eq!(messages_snapshot[1].role, "system");
-        // Version bump is now the barrier's responsibility (reducers no longer bump versions)
+        let snapshot = state.messages.snapshot();
+        assert_eq!(snapshot.len(), initial_len + 1);
+        assert_eq!(snapshot[0].role, "user");
+        assert_eq!(snapshot[1].role, "system");
+        // Reducer does not bump version (barrier responsibility)
         assert_eq!(state.messages.version(), initial_version);
     }
 
@@ -63,91 +68,109 @@ mod tests {
     fn test_add_messages_empty_partial_noop() {
         let reducer = AddMessages;
         let mut state = base_state();
-        let initial_len = state.messages.snapshot().len();
         let initial_version = state.messages.version();
+        let initial_snapshot = state.messages.snapshot();
 
         let partial = NodePartial {
             messages: Some(vec![]),
-            outputs: None,
-            meta: None,
+            extra: None,
         };
 
         reducer.apply(&mut state, &partial);
 
-        let messages_snapshot = state.messages.snapshot();
-        assert_eq!(messages_snapshot.len(), initial_len);
+        assert_eq!(state.messages.snapshot(), initial_snapshot);
         assert_eq!(state.messages.version(), initial_version);
     }
+
+    /********************
+     * MapMerge (extra) tests
+     ********************/
 
     #[test]
     fn test_map_merge_merges_and_overwrites_state() {
         let reducer = MapMerge;
         let mut state = base_state();
-        // Seed meta
-        state.meta.value.insert("k1".into(), "v1".into());
-        let initial_version = state.meta.version;
+        // Seed extra
+        state
+            .extra
+            .get_mut()
+            .insert("k1".into(), Value::String("v1".into()));
+        let initial_version = state.extra.version();
 
-        let mut meta_update = HashMap::new();
-        meta_update.insert("k2".into(), "v2".into());
-        meta_update.insert("k1".into(), "v3".into()); // overwrite
+        let mut extra_update = FxHashMap::default();
+        extra_update.insert("k2".into(), Value::String("v2".into()));
+        extra_update.insert("k1".into(), Value::String("v3".into())); // overwrite existing
 
         let partial = NodePartial {
             messages: None,
-            outputs: None,
-            meta: Some(meta_update),
+            extra: Some(extra_update),
         };
 
         reducer.apply(&mut state, &partial);
 
-        assert_eq!(state.meta.value.get("k1"), Some(&"v3".to_string()));
-        assert_eq!(state.meta.value.get("k2"), Some(&"v2".to_string()));
-        // Version bump is now the barrier's responsibility
-        assert_eq!(state.meta.version, initial_version);
+        let extra_snapshot = state.extra.snapshot();
+        assert_eq!(
+            extra_snapshot.get("k1"),
+            Some(&Value::String("v3".into())),
+            "overwrite should succeed"
+        );
+        assert_eq!(
+            extra_snapshot.get("k2"),
+            Some(&Value::String("v2".into())),
+            "new key should be inserted"
+        );
+        // Version unchanged (barrier responsibility)
+        assert_eq!(state.extra.version(), initial_version);
     }
 
     #[test]
     fn test_map_merge_empty_partial_noop() {
         let reducer = MapMerge;
         let mut state = base_state();
-        state.meta.value.insert("k1".into(), "v1".into());
-        let initial_version = state.meta.version;
-        let initial_len = state.meta.value.len();
+        state
+            .extra
+            .get_mut()
+            .insert("seed".into(), Value::String("x".into()));
+        let initial_version = state.extra.version();
+        let initial_snapshot = state.extra.snapshot();
 
         let partial = NodePartial {
             messages: None,
-            outputs: None,
-            meta: Some(HashMap::new()),
+            extra: Some(FxHashMap::default()),
         };
 
         reducer.apply(&mut state, &partial);
 
-        assert_eq!(state.meta.value.len(), initial_len);
-        assert_eq!(state.meta.version, initial_version);
+        assert_eq!(state.extra.snapshot(), initial_snapshot);
+        assert_eq!(state.extra.version(), initial_version);
     }
+
+    /********************
+     * Enum wrapper / dispatch
+     ********************/
 
     #[test]
     fn test_enum_wrapper_dispatch() {
-        // Build a small registry-like vector manually
         let reducers = vec![
             ReducerType::AddMessages(AddMessages),
             ReducerType::JsonShallowMerge(MapMerge),
         ];
 
         let mut state = base_state();
-        // Add a seed meta key to observe overwrite behavior
-        state.meta.value.insert("seed".into(), "x".into());
+        state
+            .extra
+            .get_mut()
+            .insert("seed".into(), Value::String("x".into()));
+
+        let mut extra_update = FxHashMap::default();
+        extra_update.insert("seed".into(), Value::String("y".into()));
 
         let partial = NodePartial {
             messages: Some(vec![Message {
                 role: "assistant".into(),
                 content: "hi".into(),
             }]),
-            outputs: None,
-            meta: Some({
-                let mut m = HashMap::new();
-                m.insert("seed".into(), "y".into());
-                m
-            }),
+            extra: Some(extra_update),
         };
 
         for r in &reducers {
@@ -155,8 +178,15 @@ mod tests {
         }
 
         assert_eq!(state.messages.snapshot().len(), 2);
-        assert_eq!(state.meta.value.get("seed"), Some(&"y".to_string()));
+        assert_eq!(
+            state.extra.snapshot().get("seed"),
+            Some(&Value::String("y".into()))
+        );
     }
+
+    /********************
+     * Guard logic
+     ********************/
 
     #[test]
     fn test_channel_guard_logic() {
@@ -174,41 +204,39 @@ mod tests {
         assert!(channel_guard(ChannelType::Message, &msg_partial));
         assert!(!channel_guard(ChannelType::Extra, &msg_partial));
 
-        let meta_partial = NodePartial {
-            meta: Some({
-                let mut m = HashMap::new();
-                m.insert("k".into(), "v".into());
-                m
-            }),
-            ..Default::default()
+        let mut extra_map = FxHashMap::default();
+        extra_map.insert("k".into(), Value::String("v".into()));
+        let extra_partial = NodePartial {
+            messages: None,
+            extra: Some(extra_map),
         };
-        assert!(channel_guard(ChannelType::Extra, &meta_partial));
+        assert!(channel_guard(ChannelType::Extra, &extra_partial));
     }
+
+    /********************
+     * Registry integration-like flow
+     ********************/
 
     #[test]
     fn test_registry_integration_like_flow() {
-        // Simulate registry behavior (using actual ReducerRegistery if present)
         let registry = ReducerRegistery::default();
-
         let mut state = base_state();
+
+        let mut extra_update = FxHashMap::default();
+        extra_update.insert("origin".into(), Value::String("node".into()));
+
         let partial = NodePartial {
             messages: Some(vec![Message {
                 role: "assistant".into(),
                 content: "from node".into(),
             }]),
-            meta: Some({
-                let mut m = HashMap::new();
-                m.insert("origin".into(), "node".into());
-                m
-            }),
-            outputs: None,
+            extra: Some(extra_update),
         };
 
-        // Only invoke reducers whose guard passes
+        // Simulate runtime iterating channels
         for channel in [ChannelType::Message, ChannelType::Extra] {
             if channel_guard(channel.clone(), &partial) {
-                // ignore errors for test simplicity
-                let _ = registry.try_update(channel.clone(), &mut state, &partial);
+                let _ = registry.try_update(channel, &mut state, &partial);
             }
         }
 
@@ -219,6 +247,9 @@ mod tests {
                 .iter()
                 .any(|m| m.content == "from node")
         );
-        assert_eq!(state.meta.value.get("origin"), Some(&"node".to_string()));
+        assert_eq!(
+            state.extra.snapshot().get("origin"),
+            Some(&Value::String("node".into()))
+        );
     }
 }

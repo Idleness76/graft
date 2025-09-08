@@ -14,7 +14,7 @@ use crate::node::NodePartial;
 use crate::state::VersionedState;
 
 /// Unified reducer trait: every reducer mutates VersionedState using a NodePartial delta.
-/// Individual reducers decide which channel(s) they care about.
+/// Channels currently implemented: messages (append) and extra (shallow JSON map merge).
 pub trait Reducer: Send + Sync {
     fn apply(&self, state: &mut VersionedState, update: &NodePartial);
 }

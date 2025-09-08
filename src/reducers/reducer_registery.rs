@@ -37,7 +37,7 @@ fn channel_guard(channel: &ChannelType, partial: &NodePartial) -> bool {
             .map(|v| !v.is_empty())
             .unwrap_or(false),
         ChannelType::Extra => partial
-            .meta
+            .extra
             .as_ref()
             .map(|m| !m.is_empty())
             .unwrap_or(false),
