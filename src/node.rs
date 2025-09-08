@@ -12,6 +12,7 @@ pub struct NodeContext {
 #[derive(Clone, Debug, Default)]
 pub struct NodePartial {
     // Per-channel partials (all optional)
+    // TODO replace outputs and meta with Extra
     pub messages: Option<Vec<Message>>,
     pub outputs: Option<Vec<String>>,
     pub meta: Option<HashMap<String, String>>,

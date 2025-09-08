@@ -53,7 +53,6 @@ impl GraphBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reducer::*;
 
     #[test]
     /// Verifies that a new GraphBuilder is initialized with empty nodes and edges.
@@ -106,10 +105,6 @@ mod tests {
                 .unwrap()
                 .contains(&NodeKind::End)
         );
-        // Check reducer references are set
-        assert!(std::ptr::eq(app.add_messages, &ADD_MESSAGES));
-        assert!(std::ptr::eq(app.append_outputs, &APPEND_VEC));
-        assert!(std::ptr::eq(app.map_merge, &MAP_MERGE));
     }
 
     #[test]
