@@ -1,33 +1,40 @@
 use std::u32;
 
 use crate::channels::Channel;
+use rustc_hash::FxHashMap;
+use serde_json::json;
 
+use super::graph::GraphBuilder;
+use super::message::Message;
+use super::node::{NodeA, NodeB, NodePartial};
+use super::state::VersionedState;
+use super::types::NodeKind;
+
+/// Demonstration run showcasing:
+/// 1. Building and executing a small multi-step graph
+/// 2. Inspecting final state (messages + extra)
+/// 3. Manual barrier applications (mixed, no-op, saturating version)
+/// 4. GraphBuilder error cases
 pub async fn run_demo1() -> anyhow::Result<()> {
-    use serde_json::json;
-    use std::collections::HashMap;
-
-    use super::graph::GraphBuilder;
-    use super::message::Message;
-    use super::node::{NodeA, NodeB, NodePartial};
-    use super::state::VersionedState;
-    use super::types::NodeKind;
-
     println!("== Demo start ==");
 
-    // 1. Initial rich state
+    // 1. Initial state with a user message + seeded extra data
     let mut init = VersionedState::new_with_user_message("Hello world");
-    init.outputs.value.push("seed output".into());
-    init.meta.value.insert("init_key".into(), "init_val".into());
-    init.extra.value.insert("numbers".into(), json!([1, 2, 3]));
+    init.extra
+        .get_mut()
+        .insert("numbers".into(), json!([1, 2, 3]));
+    init.extra
+        .get_mut()
+        .insert("info".into(), json!({"stage": "init"}));
 
-    // 2. Build multi-step graph
+    // 2. Build multi-step graph: Start -> A -> B -> End (with a duplicate edge to A to show fan-out)
     let app = GraphBuilder::new()
         .add_node(NodeKind::Start, NodeA)
         .add_node(NodeKind::Other("A".into()), NodeA)
         .add_node(NodeKind::Other("B".into()), NodeB)
         .add_node(NodeKind::End, NodeB)
         .add_edge(NodeKind::Start, NodeKind::Other("A".into()))
-        .add_edge(NodeKind::Start, NodeKind::Other("A".into()))
+        .add_edge(NodeKind::Start, NodeKind::Other("A".into())) // duplicate path
         .add_edge(NodeKind::Other("A".into()), NodeKind::Other("B".into()))
         .add_edge(NodeKind::Other("B".into()), NodeKind::End)
         .set_entry(NodeKind::Start)
@@ -40,15 +47,14 @@ pub async fn run_demo1() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
 
-    // 4. Snapshot & mutation demonstration
+    // 4. Snapshot & mutation demonstration (snapshots are deep copies)
     let snap_before = final_state.snapshot();
     println!(
-        "Snapshot before manual mutation: messages={}, outputs={}, meta_keys={}",
+        "Snapshot (pre-mutation): messages={}, extra_keys={}",
         snap_before.messages.len(),
-        snap_before.outputs.len(),
-        snap_before.meta.len()
+        snap_before.extra.len()
     );
-    // Mutate clone (not affecting prior snapshot)
+
     let mut mutated = final_state.clone();
     mutated.messages.get_mut().push(Message {
         role: "assistant".into(),
@@ -56,97 +62,116 @@ pub async fn run_demo1() -> anyhow::Result<()> {
     });
     mutated
         .messages
-        .set_version(snap_before.messages_version + 1);
+        .set_version(snap_before.messages_version.saturating_add(1));
+    mutated
+        .extra
+        .get_mut()
+        .insert("post_mutation".into(), json!(true));
     let snap_after = mutated.snapshot();
     println!(
-        "Snapshot after mutation: messages={}, version={}",
+        "Snapshot (post-mutation clone): messages={}, version={}, extra_keys={}",
         snap_after.messages.len(),
-        snap_after.messages_version
+        snap_after.messages_version,
+        snap_after.extra.len()
     );
 
-    // 5. (Removed) Direct reducer usage with legacy per-channel APIs.
-    // Reducers are now applied via the ReducerRegistery inside barrier logic.
-    // Proceed to manual barrier scenarios below.
-
-    // 6. Manual barrier scenarios
-    // a) Mixed updates
+    // 5. Manual barrier scenarios
     let state_arc = std::sync::Arc::new(tokio::sync::RwLock::new(final_state.clone()));
+
+    // a) Mixed updates: two partials adding messages and extra keys (with overwrite)
     let run_ids = vec![
         NodeKind::Other("ManualA".into()),
         NodeKind::Other("ManualB".into()),
     ];
-    let partials = vec![
+    let mut extra1 = FxHashMap::default();
+    extra1.insert("manual".into(), json!("yes"));
+    extra1.insert("shared".into(), json!("v1"));
+    let mut extra2 = FxHashMap::default();
+    extra2.insert("shared".into(), json!("v2")); // overwrite
+    extra2.insert("more".into(), json!(123));
+
+    let partials_mixed = vec![
         NodePartial {
             messages: Some(vec![Message {
                 role: "assistant".into(),
                 content: "manual msg 1".into(),
             }]),
-            outputs: None,
-            meta: Some(HashMap::from([("manual".into(), "yes".into())])),
+            extra: Some(extra1),
         },
         NodePartial {
             messages: Some(vec![Message {
                 role: "assistant".into(),
                 content: "manual msg 2".into(),
             }]),
-            outputs: Some(vec!["manual out".into()]),
-            meta: None,
+            extra: Some(extra2),
         },
     ];
+
     let updated = app
-        .apply_barrier(&state_arc, &run_ids, partials)
+        .apply_barrier(&state_arc, &run_ids, partials_mixed)
         .await
         .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
     println!("Barrier (mixed) updated channels: {:?}", updated);
+    {
+        let lock = state_arc.read().await;
+        let snap = lock.snapshot();
+        println!(
+            "After mixed barrier: messages={}, extra_keys={}",
+            snap.messages.len(),
+            snap.extra.len()
+        );
+        println!(
+            "Extra merged shared key: {:?}",
+            snap.extra.get("shared").unwrap()
+        );
+    }
 
-    // b) No-op updates (empty)
+    // b) No-op updates (empty vectors/maps should produce no version bumps)
+    let partials_noop = vec![
+        NodePartial {
+            messages: Some(vec![]),
+            extra: None,
+        },
+        NodePartial {
+            messages: None,
+            extra: Some(FxHashMap::default()),
+        },
+    ];
     let updated2 = app
-        .apply_barrier(
-            &state_arc,
-            &[],
-            vec![NodePartial {
-                messages: Some(vec![]),
-                outputs: Some(vec![]),
-                meta: Some(HashMap::new()),
-            }],
-        )
+        .apply_barrier(&state_arc, &[], partials_noop)
         .await
         .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
     println!("Barrier (no-op) updated channels: {:?}", updated2);
 
-    // c) Saturating version test
+    // c) Saturating version test for messages.version
     {
         let mut lock = state_arc.write().await;
         lock.messages.set_version(u32::MAX);
     }
+    let saturated = NodePartial {
+        messages: Some(vec![Message {
+            role: "assistant".into(),
+            content: "won't bump ver".into(),
+        }]),
+        extra: None,
+    };
     let _ = app
-        .apply_barrier(
-            &state_arc,
-            &[],
-            vec![NodePartial {
-                messages: Some(vec![Message {
-                    role: "assistant".into(),
-                    content: "won't bump ver".into(),
-                }]),
-                outputs: None,
-                meta: None,
-            }],
-        )
+        .apply_barrier(&state_arc, &[], vec![saturated])
         .await
         .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
     {
         let lock = state_arc.read().await;
         println!(
-            "Saturating test messages.version={}",
+            "Saturating test messages.version={} (should remain u32::MAX)",
             lock.messages.version()
         );
     }
 
-    // 7. GraphBuilder error demonstrations
+    // 6. GraphBuilder error demonstrations
     match super::graph::GraphBuilder::new()
-        .add_node(super::types::NodeKind::Start, super::node::NodeA)
-        .add_node(super::types::NodeKind::End, super::node::NodeB)
-        .add_edge(super::types::NodeKind::Start, super::types::NodeKind::End)
+        .add_node(NodeKind::Start, NodeA)
+        .add_node(NodeKind::End, NodeB)
+        .add_edge(NodeKind::Start, NodeKind::End)
         .compile()
     {
         Err(e) => println!("Expected error (no entry set): {:?}", e),
@@ -154,7 +179,7 @@ pub async fn run_demo1() -> anyhow::Result<()> {
     }
 
     match super::graph::GraphBuilder::new()
-        .set_entry(super::types::NodeKind::Other("Unreg".into()))
+        .set_entry(NodeKind::Other("Unreg".into()))
         .compile()
     {
         Err(e) => println!("Expected error (entry not registered): {:?}", e),

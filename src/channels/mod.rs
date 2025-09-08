@@ -1,7 +1,9 @@
 use crate::types::ChannelType;
 
+mod extras;
 mod messages;
 
+pub use extras::ExtrasChannel;
 pub use messages::MessagesChannel;
 
 pub trait Channel<T>: Sync + Send {

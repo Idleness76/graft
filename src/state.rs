@@ -1,9 +1,9 @@
+use rustc_hash::FxHashMap;
 use serde_json::Value;
-use std::collections::HashMap;
 
 use crate::{
-    channels::{Channel, MessagesChannel},
-    message::*,
+    channels::{Channel, ExtrasChannel, MessagesChannel},
+    message::Message,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -15,20 +15,14 @@ pub struct Versioned<T> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VersionedState {
     pub messages: MessagesChannel,
-    pub outputs: Versioned<Vec<String>>,
-    pub meta: Versioned<HashMap<String, String>>,
-    pub extra: Versioned<HashMap<String, Value>>,
+    pub extra: ExtrasChannel,
 }
 
 #[derive(Clone, Debug)]
 pub struct StateSnapshot {
     pub messages: Vec<Message>,
     pub messages_version: u32,
-    pub outputs: Vec<String>,
-    pub outputs_version: u32,
-    pub meta: HashMap<String, String>,
-    pub meta_version: u32,
-    pub extra: HashMap<String, Value>,
+    pub extra: FxHashMap<String, Value>,
     pub extra_version: u32,
 }
 
@@ -38,21 +32,9 @@ impl VersionedState {
             role: "user".into(),
             content: user_text.into(),
         }];
-
         Self {
             messages: MessagesChannel::new(messages, 1),
-            outputs: Versioned {
-                value: Vec::new(),
-                version: 1,
-            },
-            meta: Versioned {
-                value: HashMap::new(),
-                version: 1,
-            },
-            extra: Versioned {
-                value: HashMap::new(),
-                version: 1,
-            },
+            extra: ExtrasChannel::default(),
         }
     }
 
@@ -60,12 +42,8 @@ impl VersionedState {
         StateSnapshot {
             messages: self.messages.snapshot(),
             messages_version: self.messages.version(),
-            outputs: self.outputs.value.clone(),
-            outputs_version: self.outputs.version,
-            meta: self.meta.value.clone(),
-            meta_version: self.meta.version,
-            extra: self.extra.value.clone(),
-            extra_version: self.extra.version,
+            extra: self.extra.snapshot(),
+            extra_version: self.extra.version(),
         }
     }
 }
@@ -73,131 +51,67 @@ impl VersionedState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
     #[test]
-    /// Verifies that VersionedState::new_with_user_message initializes all fields correctly with a user message.
-    fn test_new_with_user_message() {
-        let user_text = "Hello, world!";
-        let state = VersionedState::new_with_user_message(user_text);
-        let messages_snapshot = state.messages.snapshot();
-        assert_eq!(messages_snapshot.len(), 1);
-        let msg = &messages_snapshot[0];
-        assert_eq!(msg.role, "user");
-        assert_eq!(msg.content, user_text);
-        assert_eq!(state.messages.version(), 1);
-        assert!(state.outputs.value.is_empty());
-        assert_eq!(state.outputs.version, 1);
-        assert!(state.meta.value.is_empty());
-        assert_eq!(state.meta.version, 1);
+    fn test_new_with_user_message_initializes_fields() {
+        let s = VersionedState::new_with_user_message("hello");
+        let snap = s.snapshot();
+        assert_eq!(snap.messages.len(), 1);
+        assert_eq!(snap.messages[0].role, "user");
+        assert_eq!(snap.messages[0].content, "hello");
+        assert_eq!(snap.messages_version, 1);
+        assert!(snap.extra.is_empty());
+        assert_eq!(snap.extra_version, 1);
     }
 
     #[test]
-    /// Checks that snapshot() produces a StateSnapshot matching the current state values and versions.
-    fn test_snapshot_matches_state() {
-        let user_text = "Test message";
-        let mut state = VersionedState::new_with_user_message(user_text);
-        state.outputs.value.push("output1".to_string());
-        state.outputs.version = 2;
-        state
-            .meta
-            .value
-            .insert("key".to_string(), "value".to_string());
-        state.meta.version = 3;
-        let snap = state.snapshot();
-        assert_eq!(snap.messages, state.messages.snapshot());
-        assert_eq!(snap.messages_version, state.messages.version());
-        assert_eq!(snap.outputs, state.outputs.value);
-        assert_eq!(snap.outputs_version, state.outputs.version);
-        assert_eq!(snap.meta, state.meta.value);
-        assert_eq!(snap.meta_version, state.meta.version);
-    }
-
-    #[test]
-    /// Ensures that StateSnapshot is a deep copy and remains unchanged when the original state is mutated after snapshotting.
     fn test_snapshot_is_deep_copy() {
-        let mut state = VersionedState::new_with_user_message("msg");
-        let snap = state.snapshot();
-        // Mutate state after snapshot
-        state.messages.snapshot()[0].content = "changed".to_string();
-        state.outputs.value.push("new_output".to_string());
-        state
-            .meta
-            .value
-            .insert("foo".to_string(), "bar".to_string());
-        // Snapshot should remain unchanged
-        assert_eq!(snap.messages[0].content, "msg");
-        assert!(snap.outputs.is_empty());
-        assert!(snap.meta.is_empty());
+        let mut s = VersionedState::new_with_user_message("x");
+        let snap = s.snapshot();
+        // mutate original
+        s.messages.get_mut()[0].content = "changed".into();
+        s.extra
+            .get_mut()
+            .insert("k".into(), Value::String("v".into()));
+        // snapshot should be unaffected
+        assert_eq!(snap.messages[0].content, "x");
+        assert!(snap.extra.get("k").is_none());
     }
 
     #[test]
-    /// Validates that the Versioned struct stores values and versions correctly for different types.
-    fn test_versioned_struct() {
-        let v = Versioned {
-            value: vec![1, 2, 3],
-            version: 42,
-        };
-        assert_eq!(v.value, vec![1, 2, 3]);
-        assert_eq!(v.version, 42);
-        let v2 = Versioned {
-            value: "abc".to_string(),
-            version: 7,
-        };
-        assert_eq!(v2.value, "abc");
-        assert_eq!(v2.version, 7);
-        let mut map = HashMap::new();
-        map.insert("k".to_string(), "v".to_string());
-        let v3 = Versioned {
-            value: map.clone(),
-            version: 99,
-        };
-        assert_eq!(v3.value, map);
-        assert_eq!(v3.version, 99);
-    }
-
-    #[test]
-    /// Checks that cloning VersionedState produces a deep copy, and mutations to the original do not affect the clone.
-    fn test_cloning_versioned_state() {
-        let mut state = VersionedState::new_with_user_message("clone me");
-        state.outputs.value.push("out".to_string());
-        state.meta.value.insert("x".to_string(), "y".to_string());
-        let messages_snapshot = state.messages.snapshot();
-        let cloned = state.clone();
-        assert_eq!(cloned.messages.snapshot(), messages_snapshot);
-        assert_eq!(cloned.outputs.value, state.outputs.value);
-        assert_eq!(cloned.meta.value, state.meta.value);
-        // Mutate original, cloned should not change
-        state.messages.get_mut()[0].content = "changed".to_string();
-        state.outputs.value.push("new".to_string());
-        state
-            .meta
-            .value
-            .insert("foo".to_string(), "bar".to_string());
-        assert_ne!(cloned.messages.snapshot(), state.messages.snapshot());
-        assert_ne!(cloned.outputs.value, state.outputs.value);
-        assert_ne!(cloned.meta.value, state.meta.value);
-    }
-
-    #[test]
-    /// Verifies that the `extra` field in VersionedState can store and retrieve flexible data types
-    /// using serde_json::Value, including numbers, strings, and arrays. This ensures that the state
-    /// model supports arbitrary extension data as required by the project specification.
     fn test_extra_flexible_types() {
         use serde_json::json;
-        let mut state = VersionedState::new_with_user_message("test");
-        // Insert a number
-        state.extra.value.insert("number".to_string(), json!(123));
-        // Insert a string
-        state.extra.value.insert("text".to_string(), json!("abc"));
-        // Insert an array
-        state
-            .extra
-            .value
-            .insert("array".to_string(), json!([1, 2, 3]));
-        // Assert retrieval matches what was inserted
-        assert_eq!(state.extra.value["number"], json!(123));
-        assert_eq!(state.extra.value["text"], json!("abc"));
-        assert_eq!(state.extra.value["array"], json!([1, 2, 3]));
+        let mut s = VersionedState::new_with_user_message("y");
+        s.extra.get_mut().insert("number".into(), json!(123));
+        s.extra.get_mut().insert("text".into(), json!("abc"));
+        s.extra.get_mut().insert("array".into(), json!([1, 2, 3]));
+        let snap = s.snapshot();
+        assert_eq!(snap.extra["number"], json!(123));
+        assert_eq!(snap.extra["text"], json!("abc"));
+        assert_eq!(snap.extra["array"], json!([1, 2, 3]));
+    }
+
+    #[test]
+    fn test_clone_is_deep() {
+        let mut s = VersionedState::new_with_user_message("msg");
+        s.extra
+            .get_mut()
+            .insert("k1".into(), Value::String("v1".into()));
+        let cloned = s.clone();
+        // mutate original
+        s.messages.get_mut()[0].content = "changed".into();
+        s.extra
+            .get_mut()
+            .insert("k2".into(), Value::String("v2".into()));
+        // cloned should differ now
+        assert_ne!(cloned.messages.snapshot(), s.messages.snapshot());
+        assert_ne!(cloned.extra.snapshot(), s.extra.snapshot());
+        // original initial data remains in clone
+        assert_eq!(cloned.messages.snapshot()[0].content, "msg");
+        assert_eq!(
+            cloned.extra.snapshot().get("k1"),
+            Some(&Value::String("v1".into()))
+        );
+        assert!(cloned.extra.snapshot().get("k2").is_none());
     }
 }

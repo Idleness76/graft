@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -12,16 +12,16 @@ use crate::node::*;
 use crate::types::*;
 
 pub struct GraphBuilder {
-    pub nodes: HashMap<NodeKind, Arc<dyn Node>>,
-    pub edges: HashMap<NodeKind, Vec<NodeKind>>,
+    pub nodes: FxHashMap<NodeKind, Arc<dyn Node>>,
+    pub edges: FxHashMap<NodeKind, Vec<NodeKind>>,
     pub entry: Option<NodeKind>,
 }
 
 impl GraphBuilder {
     pub fn new() -> Self {
         Self {
-            nodes: HashMap::new(),
-            edges: HashMap::new(),
+            nodes: FxHashMap::default(),
+            edges: FxHashMap::default(),
             entry: None,
         }
     }
