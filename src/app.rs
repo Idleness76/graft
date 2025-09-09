@@ -1,4 +1,3 @@
-use futures::future::join_all;
 use rustc_hash::FxHashMap;
 use serde_json::Value;
 use std::sync::Arc;
@@ -8,6 +7,7 @@ use crate::channels::Channel;
 use crate::message::*;
 use crate::node::*;
 use crate::reducers::ReducerRegistery;
+use crate::schedulers::Scheduler;
 use crate::state::*;
 use crate::types::*;
 
@@ -58,6 +58,11 @@ impl App {
         }
 
         println!("== Begin run ==");
+        // Initialize scheduler with a sensible default concurrency limit.
+        let default_limit = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        let mut scheduler = Scheduler::new(default_limit);
 
         loop {
             step += 1;
@@ -79,25 +84,29 @@ impl App {
                 snapshot.extra_version
             );
 
-            // Launch all non-End nodes in parallel
-            let mut run_ids: Vec<NodeKind> = Vec::new();
-            let mut futs = Vec::new();
-            for node_id in frontier.iter() {
-                if *node_id == NodeKind::End {
-                    continue;
-                }
-                let id = node_id.clone();
-                run_ids.push(id.clone());
-                let node = self.nodes().get(&id).unwrap().clone();
-                let ctx = NodeContext {
-                    node_id: format!("{:?}", id),
-                    step,
-                };
-                let snap = snapshot.clone();
-                futs.push(async move { node.run(snap, ctx).await });
-            }
+            // Choose nodes to run this step (version-gated), preserving frontier order
+            let run_ids: Vec<NodeKind> = frontier
+                .iter()
+                .filter(|n| !matches!(n, &NodeKind::End))
+                .cloned()
+                .filter(|n| scheduler.should_run(&format!("{:?}", n), &snapshot))
+                .collect();
 
-            let node_partials: Vec<NodePartial> = join_all(futs).await;
+            // Execute via scheduler with bounded concurrency
+            let step_result = scheduler
+                .superstep(self.nodes(), frontier.clone(), snapshot.clone(), step)
+                .await;
+
+            // Reorder outputs to match run_ids order expected by the barrier
+            let mut by_id: FxHashMap<String, NodePartial> = FxHashMap::default();
+            for (id, part) in step_result.outputs {
+                by_id.insert(id, part);
+            }
+            let node_partials: Vec<NodePartial> = run_ids
+                .iter()
+                .map(|k| format!("{:?}", k))
+                .filter_map(|id| by_id.remove(&id))
+                .collect();
 
             // Barrier: merge all NodePartials per channel then apply reducers
             let updated_channels = self.apply_barrier(&state, &run_ids, node_partials).await?;
