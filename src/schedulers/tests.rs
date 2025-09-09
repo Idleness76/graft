@@ -108,10 +108,10 @@ async fn test_superstep_skips_end_and_nochange() {
         .await;
     // All ran except End
     let ran1: std::collections::HashSet<_> = res1.ran_nodes.iter().cloned().collect();
-    assert!(ran1.contains("Other(\"A\")"));
-    assert!(ran1.contains("Other(\"B\")"));
-    assert!(!ran1.contains("End"));
-    assert!(res1.skipped_nodes.iter().any(|s| s == "End"));
+    assert!(ran1.contains(&NodeKind::Other("A".into())));
+    assert!(ran1.contains(&NodeKind::Other("B".into())));
+    assert!(!ran1.contains(&NodeKind::End));
+    assert!(res1.skipped_nodes.iter().any(|s| *s == NodeKind::End));
     assert_eq!(res1.outputs.len(), 2);
 
     // Record_seen happened inside superstep; with same snapshot, nothing should run now.
@@ -121,9 +121,9 @@ async fn test_superstep_skips_end_and_nochange() {
     assert!(res2.ran_nodes.is_empty());
     // Both A and B plus End appear in skipped (version-gated or End)
     let skipped2: std::collections::HashSet<_> = res2.skipped_nodes.iter().cloned().collect();
-    assert!(skipped2.contains("Other(\"A\")"));
-    assert!(skipped2.contains("Other(\"B\")"));
-    assert!(skipped2.contains("End"));
+    assert!(skipped2.contains(&NodeKind::Other("A".into())));
+    assert!(skipped2.contains(&NodeKind::Other("B".into())));
+    assert!(skipped2.contains(&NodeKind::End));
     assert!(res2.outputs.is_empty());
 
     // Increase messages version -> A and B should run again
@@ -132,8 +132,8 @@ async fn test_superstep_skips_end_and_nochange() {
         .superstep(&nodes, frontier.clone(), snap_bump, 3)
         .await;
     let ran3: std::collections::HashSet<_> = res3.ran_nodes.iter().cloned().collect();
-    assert!(ran3.contains("Other(\"A\")"));
-    assert!(ran3.contains("Other(\"B\")"));
+    assert!(ran3.contains(&NodeKind::Other("A".into())));
+    assert!(ran3.contains(&NodeKind::Other("B".into())));
     assert_eq!(res3.outputs.len(), 2);
 }
 
@@ -165,13 +165,13 @@ async fn test_superstep_outputs_order_agnostic() {
     // ran_nodes preserves scheduling order (frontier order, after gating)
     assert_eq!(
         res.ran_nodes,
-        vec!["Other(\"A\")".to_string(), "Other(\"B\")".to_string()]
+        vec![NodeKind::Other("A".into()), NodeKind::Other("B".into())]
     );
 
     // outputs may arrive in any order; validate by ID set, not sequence
     let ids: std::collections::HashSet<_> = res.outputs.iter().map(|(id, _)| id.clone()).collect();
     let expected: std::collections::HashSet<_> =
-        ["Other(\"A\")".to_string(), "Other(\"B\")".to_string()]
+        [NodeKind::Other("A".into()), NodeKind::Other("B".into())]
             .into_iter()
             .collect();
     assert_eq!(ids, expected);
@@ -205,7 +205,7 @@ async fn test_superstep_serialized_with_limit_1() {
     // ran_nodes preserves scheduling order
     assert_eq!(
         res.ran_nodes,
-        vec!["Other(\"A\")".to_string(), "Other(\"B\")".to_string()]
+        vec![NodeKind::Other("A".into()), NodeKind::Other("B".into())]
     );
 
     // outputs must be in the same order as ran_nodes

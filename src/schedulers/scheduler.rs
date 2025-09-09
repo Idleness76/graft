@@ -8,12 +8,12 @@ use std::sync::Arc;
 /// Result of running a superstep over the frontier.
 #[derive(Debug, Clone)]
 pub struct StepRunResult {
-    /// Node IDs (as strings) that were executed this step, in the order they were scheduled.
-    pub ran_nodes: Vec<String>,
-    /// Node IDs (as strings) that were skipped this step (End nodes or no new versions seen).
-    pub skipped_nodes: Vec<String>,
-    /// Outputs from nodes that ran: (node_id_string, NodePartial)
-    pub outputs: Vec<(String, NodePartial)>,
+    /// Nodes that were executed this step, in the order they were scheduled.
+    pub ran_nodes: Vec<NodeKind>,
+    /// Nodes that were skipped this step (End nodes or no new versions seen).
+    pub skipped_nodes: Vec<NodeKind>,
+    /// Outputs from nodes that ran: (node_kind, NodePartial)
+    pub outputs: Vec<(NodeKind, NodePartial)>,
 }
 
 /// Frontier scheduler with version gating and bounded concurrency.
@@ -112,22 +112,28 @@ impl Scheduler {
 
         // Build tasks for the nodes to run.
         let to_run_ids: Vec<String> = to_run.iter().map(|k| format!("{:?}", k)).collect();
-        let tasks = to_run_ids.iter().zip(to_run.iter()).map(|(id_str, kind)| {
-            let node = nodes.get(kind).expect("node in frontier not found").clone();
-            let ctx = NodeContext {
-                node_id: id_str.clone(),
-                step,
-            };
-            let s = snap.clone();
-            let id = id_str.clone();
-            async move {
-                let out = node.run(s, ctx).await;
-                (id, out)
-            }
-        });
+        let tasks = to_run_ids
+            .iter()
+            .cloned()
+            .zip(to_run.iter().cloned())
+            .map(|(id_str, kind)| {
+                let node = nodes
+                    .get(&kind)
+                    .expect("node in frontier not found")
+                    .clone();
+                let ctx = NodeContext {
+                    node_id: id_str.clone(),
+                    step,
+                };
+                let s = snap.clone();
+                async move {
+                    let out = node.run(s, ctx).await;
+                    (kind, out)
+                }
+            });
 
         // Execute with bounded concurrency; completion order may differ.
-        let outputs: Vec<(String, NodePartial)> = stream::iter(tasks)
+        let outputs: Vec<(NodeKind, NodePartial)> = stream::iter(tasks)
             .buffer_unordered(self.concurrency_limit)
             .collect()
             .await;
@@ -137,14 +143,9 @@ impl Scheduler {
             self.record_seen_with(id, &channels);
         }
 
-        let skipped_nodes = skipped_kinds
-            .into_iter()
-            .map(|k| format!("{:?}", k))
-            .collect();
-
         StepRunResult {
-            ran_nodes: to_run_ids,
-            skipped_nodes,
+            ran_nodes: to_run,
+            skipped_nodes: skipped_kinds,
             outputs,
         }
     }
