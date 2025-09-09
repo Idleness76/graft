@@ -36,28 +36,52 @@ impl Scheduler {
         }
     }
 
+    /// Helper to expose channel versions as generic (name, version) pairs.
+    #[inline]
+    fn channel_versions(snap: &StateSnapshot) -> [(&'static str, u64); 2] {
+        [
+            ("messages", snap.messages_version as u64),
+            ("extra", snap.extra_version as u64),
+        ]
+    }
+
     /// Decide if a node should run given the pre-barrier snapshot.
     /// Returns true if any channel version increased since this node last ran.
     pub fn should_run(&self, node_id: &str, snap: &StateSnapshot) -> bool {
+        let channels = Self::channel_versions(snap);
+        self.should_run_with(node_id, &channels)
+    }
+
+    /// Generic form of should_run: decide based on provided (channel_name, version) pairs.
+    pub fn should_run_with(&self, node_id: &str, channels: &[(&str, u64)]) -> bool {
         let seen = match self.versions_seen.get(node_id) {
             Some(v) => v,
             None => return true, // never ran -> run
         };
-        let seen_msgs = seen.get("messages").copied().unwrap_or(0);
-        let seen_extra = seen.get("extra").copied().unwrap_or(0);
-        let msgs_changed = (snap.messages_version as u64) > seen_msgs;
-        let extra_changed = (snap.extra_version as u64) > seen_extra;
-        msgs_changed || extra_changed
+        for (name, ver) in channels.iter() {
+            let last = seen.get::<str>(name).copied().unwrap_or(0);
+            if *ver > last {
+                return true;
+            }
+        }
+        false
     }
 
     /// Record the versions seen for a node at the start of its execution (pre-barrier snapshot).
     pub fn record_seen(&mut self, node_id: &str, snap: &StateSnapshot) {
+        let channels = Self::channel_versions(snap);
+        self.record_seen_with(node_id, &channels);
+    }
+
+    /// Generic form of record_seen: store versions for provided (channel_name, version) pairs.
+    pub fn record_seen_with(&mut self, node_id: &str, channels: &[(&str, u64)]) {
         let entry = self
             .versions_seen
             .entry(node_id.to_string())
             .or_insert_with(FxHashMap::default);
-        entry.insert("messages".into(), snap.messages_version as u64);
-        entry.insert("extra".into(), snap.extra_version as u64);
+        for (name, ver) in channels.iter() {
+            entry.insert((*name).to_string(), *ver);
+        }
     }
 
     /// Run one superstep over a frontier with bounded concurrency. End nodes are skipped.
@@ -68,16 +92,18 @@ impl Scheduler {
         snap: StateSnapshot,                        // pre-barrier snapshot
         step: u64,
     ) -> StepRunResult {
-        // Partition frontier into to_run vs skipped (includes End and version-gated skips).
+        // Partition frontier into to_run vs skipped using a skip predicate and version gating.
+        let channels = Self::channel_versions(&snap);
+        let skip_predicate = |k: &NodeKind| matches!(k, NodeKind::End);
         let mut to_run: Vec<NodeKind> = Vec::new();
         let mut skipped_kinds: Vec<NodeKind> = Vec::new();
         for k in frontier.into_iter() {
-            if k == NodeKind::End {
+            if skip_predicate(&k) {
                 skipped_kinds.push(k);
                 continue;
             }
             let id_str = format!("{:?}", k);
-            if self.should_run(&id_str, &snap) {
+            if self.should_run_with(&id_str, &channels) {
                 to_run.push(k);
             } else {
                 skipped_kinds.push(k);
@@ -108,7 +134,7 @@ impl Scheduler {
 
         // Record versions seen for nodes that ran.
         for id in &to_run_ids {
-            self.record_seen(id, &snap);
+            self.record_seen_with(id, &channels);
         }
 
         let skipped_nodes = skipped_kinds
