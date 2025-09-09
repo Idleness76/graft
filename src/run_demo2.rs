@@ -57,8 +57,8 @@ pub async fn run_demo2() -> anyhow::Result<()> {
         .unwrap_or_default();
 
     // Tracking totals for a recap at the end
-    let mut ran_counts: FxHashMap<String, u32> = FxHashMap::default();
-    let mut skipped_counts: FxHashMap<String, u32> = FxHashMap::default();
+    let mut ran_counts: FxHashMap<NodeKind, u32> = FxHashMap::default();
+    let mut skipped_counts: FxHashMap<NodeKind, u32> = FxHashMap::default();
 
     println!("== Begin scheduler run ==");
     println!("Using concurrency_limit = {}", scheduler.concurrency_limit);
@@ -83,17 +83,7 @@ pub async fn run_demo2() -> anyhow::Result<()> {
         );
         println!("Current frontier: {:?}", frontier);
 
-        // Decide which nodes to run BEFORE calling the scheduler (so gating isn't affected by record_seen).
-        let run_ids_pre: Vec<NodeKind> = frontier
-            .iter()
-            .filter(|n| !matches!(n, &NodeKind::End))
-            .cloned()
-            .filter(|n| scheduler.should_run(&format!("{:?}", n), &snapshot))
-            .collect();
-        let run_id_strs: Vec<String> = run_ids_pre.iter().map(|k| format!("{:?}", k)).collect();
-        println!("Planned to run (pre-gated): {:?}", run_id_strs);
-
-        // Use scheduler to run the frontier
+        // Use scheduler to run the frontier (scheduler decides run vs skip)
         let step_result: StepRunResult = scheduler
             .superstep(app.nodes(), frontier.clone(), snapshot.clone(), step)
             .await;
@@ -110,20 +100,18 @@ pub async fn run_demo2() -> anyhow::Result<()> {
         );
 
         // Explain skip reasons: End vs gated-by-versions
-        let end_skips: Vec<String> = frontier
+        let end_skips: Vec<NodeKind> = step_result
+            .skipped_nodes
             .iter()
             .filter(|n| matches!(n, NodeKind::End))
-            .map(|_| "End".to_string())
+            .cloned()
             .collect();
-        let planned_set: std::collections::HashSet<_> = run_id_strs.iter().cloned().collect();
-        let frontier_non_end: Vec<String> = frontier
+        let ran_set: std::collections::HashSet<_> = step_result.ran_nodes.iter().cloned().collect();
+        let gated_skips: Vec<NodeKind> = frontier
             .iter()
             .filter(|n| !matches!(n, NodeKind::End))
-            .map(|k| format!("{:?}", k))
-            .collect();
-        let gated_skips: Vec<String> = frontier_non_end
-            .into_iter()
-            .filter(|id| !planned_set.contains(id))
+            .filter(|n| !ran_set.contains(*n))
+            .cloned()
             .collect();
         if !end_skips.is_empty() || !gated_skips.is_empty() {
             println!("Skip reasons:");
@@ -142,31 +130,32 @@ pub async fn run_demo2() -> anyhow::Result<()> {
                 let msg_count = partial.messages.as_ref().map(|v| v.len()).unwrap_or(0);
                 let extra_count = partial.extra.as_ref().map(|m| m.len()).unwrap_or(0);
                 println!(
-                    "  - {:<12} | messages: {:>2} | extra keys: {:>2}",
+                    "  - {:<12?} | messages: {:>2} | extra keys: {:>2}",
                     id, msg_count, extra_count
                 );
             }
         }
 
-        // Apply barrier using precomputed run_ids and outputs (reordered to match run_ids).
-        let mut by_id: FxHashMap<String, NodePartial> = FxHashMap::default();
-        for (id, part) in step_result.outputs {
-            by_id.insert(id, part);
+        // Apply barrier using scheduler's ran_nodes and outputs (reordered to match ran_nodes).
+        let mut by_kind: FxHashMap<NodeKind, NodePartial> = FxHashMap::default();
+        for (kind, part) in step_result.outputs {
+            by_kind.insert(kind, part);
         }
-        let node_partials: Vec<NodePartial> = run_ids_pre
+        let run_ids: Vec<NodeKind> = step_result.ran_nodes.clone();
+        let node_partials: Vec<NodePartial> = run_ids
             .iter()
-            .map(|k| format!("{:?}", k))
-            .filter_map(|id| by_id.remove(&id))
+            .cloned()
+            .filter_map(|k| by_kind.remove(&k))
             .collect();
         let updated_channels = app
-            .apply_barrier(&state, &run_ids_pre, node_partials)
+            .apply_barrier(&state, &run_ids, node_partials)
             .await
             .map_err(|e| anyhow::Error::msg(e.to_string()))?;
         println!("Barrier updated channels: {:?}", updated_channels);
         // Show versions_seen for nodes that ran (pre-barrier snapshot versions recorded by scheduler)
-        if !run_ids_pre.is_empty() {
+        if !run_ids.is_empty() {
             println!("versions_seen after run:");
-            for k in &run_ids_pre {
+            for k in &run_ids {
                 let id = format!("{:?}", k);
                 if let Some(map) = scheduler.versions_seen.get(&id) {
                     let mv = map.get("messages").copied().unwrap_or(0);
@@ -180,7 +169,7 @@ pub async fn run_demo2() -> anyhow::Result<()> {
 
         // Compute next frontier
         let mut next: Vec<NodeKind> = Vec::new();
-        for id in run_ids_pre.iter() {
+        for id in run_ids.iter() {
             if let Some(dests) = app.edges().get(id) {
                 for d in dests {
                     if !next.contains(d) {
@@ -217,18 +206,20 @@ pub async fn run_demo2() -> anyhow::Result<()> {
     println!("== Demo2 complete ==");
     // Recap totals
     println!("\nRecap: node run/skip counts");
-    // union of keys
-    let mut keys: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut keys: std::collections::HashSet<NodeKind> = std::collections::HashSet::new();
     for k in ran_counts.keys() {
         keys.insert(k.clone());
     }
     for k in skipped_counts.keys() {
         keys.insert(k.clone());
     }
+    let mut keys: Vec<NodeKind> = keys.into_iter().collect();
+    // Stable print order based on Debug string
+    keys.sort_by(|a, b| format!("{:?}", a).cmp(&format!("{:?}", b)));
     for k in keys {
         let r = ran_counts.get(&k).copied().unwrap_or(0);
         let s = skipped_counts.get(&k).copied().unwrap_or(0);
-        println!("  - {:<12} | ran {:>2} | skipped {:>2}", k, r, s);
+        println!("  - {:<12?} | ran {:>2} | skipped {:>2}", k, r, s);
     }
     Ok(())
 }

@@ -84,28 +84,21 @@ impl App {
                 snapshot.extra_version
             );
 
-            // Choose nodes to run this step (version-gated), preserving frontier order
-            let run_ids: Vec<NodeKind> = frontier
-                .iter()
-                .filter(|n| !matches!(n, &NodeKind::End))
-                .cloned()
-                .filter(|n| scheduler.should_run(&format!("{:?}", n), &snapshot))
-                .collect();
-
-            // Execute via scheduler with bounded concurrency
+            // Execute via scheduler with bounded concurrency; it decides run vs skip
             let step_result = scheduler
                 .superstep(self.nodes(), frontier.clone(), snapshot.clone(), step)
                 .await;
 
-            // Reorder outputs to match run_ids order expected by the barrier
-            let mut by_id: FxHashMap<String, NodePartial> = FxHashMap::default();
-            for (id, part) in step_result.outputs {
-                by_id.insert(id, part);
+            // Reorder outputs to match ran_nodes order expected by the barrier
+            let mut by_kind: FxHashMap<NodeKind, NodePartial> = FxHashMap::default();
+            for (kind, part) in step_result.outputs {
+                by_kind.insert(kind, part);
             }
+            let run_ids: Vec<NodeKind> = step_result.ran_nodes.clone();
             let node_partials: Vec<NodePartial> = run_ids
                 .iter()
-                .map(|k| format!("{:?}", k))
-                .filter_map(|id| by_id.remove(&id))
+                .cloned()
+                .filter_map(|k| by_kind.remove(&k))
                 .collect();
 
             // Barrier: merge all NodePartials per channel then apply reducers

@@ -56,13 +56,14 @@ let mut frontier: Vec<NodeKind> = app.edges().get(&NodeKind::Start).cloned().unw
 
 ---
 
+
 ## 4. Superstep Execution & Logging
 
-The demo enters a loop, executing supersteps until only End nodes remain. Each superstep includes:
+The demo enters a loop, executing supersteps until only End nodes remain. For each superstep:
 
-- **Snapshot:** Consistent view of state for the step.
-- **Frontier Analysis:** Prints current frontier and planned nodes to run (pre-gated by version).
-- **Scheduler Run:** Executes nodes in the frontier with bounded concurrency, producing a `StepRunResult`.
+- **Snapshot:** A consistent view of state is taken for the step.
+- **Frontier Analysis:** The current frontier is printed. The App passes the full frontier to the Scheduler, which decides which nodes should run and which should be skipped (based on version changes and node type).
+- **Scheduler Run:** The Scheduler executes eligible nodes in the frontier with bounded concurrency, returning a `StepRunResult` containing `ran_nodes`, `skipped_nodes`, and outputs.
 - **Verbose Logging:**
     - Superstep header with message/extra counts and versions.
     - Ran/skipped nodes, with skip reasons (End vs version-gated).
@@ -89,13 +90,14 @@ sequenceDiagram
 
 ## 5. Barrier Application
 
+
 After each superstep, the barrier merges node outputs and applies reducers. The demo logs which channels were updated and the new versions for each node:
 
 ```rust
-let updated_channels = app.apply_barrier(&state, &run_ids_pre, node_partials).await?...;
+let updated_channels = app.apply_barrier(&state, &step_result.ran_nodes, node_partials).await?...;
 println!("Barrier updated channels: {:?}", updated_channels);
 println!("versions_seen after run:");
-for k in &run_ids_pre {
+for k in &step_result.ran_nodes {
     // ... print per-node versions ...
 }
 ```
