@@ -76,7 +76,7 @@ pub async fn run_demo1() -> anyhow::Result<()> {
     );
 
     // 5. Manual barrier scenarios
-    let state_arc = std::sync::Arc::new(tokio::sync::RwLock::new(final_state.clone()));
+    let mut manual_state = final_state.clone();
 
     // a) Mixed updates: two partials adding messages and extra keys (with overwrite)
     let run_ids = vec![
@@ -108,13 +108,12 @@ pub async fn run_demo1() -> anyhow::Result<()> {
     ];
 
     let updated = app
-        .apply_barrier(&state_arc, &run_ids, partials_mixed)
+        .apply_barrier(&mut manual_state, &run_ids, partials_mixed)
         .await
         .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
     println!("Barrier (mixed) updated channels: {:?}", updated);
     {
-        let lock = state_arc.read().await;
-        let snap = lock.snapshot();
+        let snap = manual_state.snapshot();
         println!(
             "After mixed barrier: messages={}, extra_keys={}",
             snap.messages.len(),
@@ -138,15 +137,14 @@ pub async fn run_demo1() -> anyhow::Result<()> {
         },
     ];
     let updated2 = app
-        .apply_barrier(&state_arc, &[], partials_noop)
+        .apply_barrier(&mut manual_state, &[], partials_noop)
         .await
         .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
     println!("Barrier (no-op) updated channels: {:?}", updated2);
 
     // c) Saturating version test for messages.version
     {
-        let mut lock = state_arc.write().await;
-        lock.messages.set_version(u32::MAX);
+        manual_state.messages.set_version(u32::MAX);
     }
     let saturated = NodePartial {
         messages: Some(vec![Message {
@@ -156,14 +154,13 @@ pub async fn run_demo1() -> anyhow::Result<()> {
         extra: None,
     };
     let _ = app
-        .apply_barrier(&state_arc, &[], vec![saturated])
+        .apply_barrier(&mut manual_state, &[], vec![saturated])
         .await
         .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
     {
-        let lock = state_arc.read().await;
         println!(
             "Saturating test messages.version={} (should remain u32::MAX)",
-            lock.messages.version()
+            manual_state.messages.version()
         );
     }
 

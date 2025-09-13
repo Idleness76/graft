@@ -1,7 +1,6 @@
 use rustc_hash::FxHashMap;
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 use crate::channels::Channel;
 use crate::message::*;
@@ -44,7 +43,7 @@ impl App {
         &self,
         initial_state: VersionedState,
     ) -> Result<VersionedState, Box<dyn std::error::Error + Send + Sync>> {
-        let state = Arc::new(RwLock::new(initial_state));
+        let mut state = initial_state;
         let mut step: u64 = 0;
 
         // Initial frontier = successors of Start
@@ -74,7 +73,7 @@ impl App {
             }
 
             // Snapshot for this superstep (consistent view)
-            let snapshot = { state.read().await.snapshot() };
+            let snapshot = { state.snapshot() };
             println!(
                 "\n-- Superstep {} --\nmsgs={} v{}; extra_keys={} v{}",
                 step,
@@ -102,7 +101,9 @@ impl App {
                 .collect();
 
             // Barrier: merge all NodePartials per channel then apply reducers
-            let updated_channels = self.apply_barrier(&state, &run_ids, node_partials).await?;
+            let updated_channels = self
+                .apply_barrier(&mut state, &run_ids, node_partials)
+                .await?;
 
             // Compute next frontier
             let mut next: Vec<NodeKind> = Vec::new();
@@ -127,9 +128,7 @@ impl App {
         }
 
         println!("\n== Final state ==");
-        let final_state = Arc::try_unwrap(state)
-            .expect("state still borrowed")
-            .into_inner();
+        let final_state = state;
 
         for (i, m) in final_state.messages.snapshot().iter().enumerate() {
             println!("#{:02} [{}] {}", i, m.role, m.content);
@@ -152,7 +151,7 @@ impl App {
     /// Merge NodePartial updates, invoke reducers, bump versions if content changed.
     pub async fn apply_barrier(
         &self,
-        state: &Arc<RwLock<VersionedState>>,
+        state: &mut VersionedState,
         run_ids: &[NodeKind],
         node_partials: Vec<NodePartial>,
     ) -> Result<Vec<&'static str>, Box<dyn std::error::Error + Send + Sync>> {
@@ -194,43 +193,44 @@ impl App {
             },
         };
 
-        let mut s = state.write().await;
-
         // Record before-states for version bump decisions
-        let msgs_before_len = s.messages.len();
-        let msgs_before_ver = s.messages.version();
-        let extra_before = s.extra.snapshot();
-        let extra_before_ver = s.extra.version();
+        let msgs_before_len = state.messages.len();
+        let msgs_before_ver = state.messages.version();
+        let extra_before = state.extra.snapshot();
+        let extra_before_ver = state.extra.version();
 
         // Apply reducers (they do NOT bump versions)
-        self.reducer_registery.apply_all(&mut *s, &merged_updates)?;
+        self.reducer_registery
+            .apply_all(&mut *state, &merged_updates)?;
 
         // Detect changes & bump versions responsibly
         let mut updated: Vec<&'static str> = Vec::new();
 
-        let msgs_changed = s.messages.len() != msgs_before_len;
+        let msgs_changed = state.messages.len() != msgs_before_len;
         if msgs_changed {
-            s.messages.set_version(msgs_before_ver.saturating_add(1));
+            state
+                .messages
+                .set_version(msgs_before_ver.saturating_add(1));
             println!(
                 "  barrier: messages len {} -> {}, v {} -> {}",
                 msgs_before_len,
-                s.messages.len(),
+                state.messages.len(),
                 msgs_before_ver,
-                s.messages.version()
+                state.messages.version()
             );
             updated.push("messages");
         }
 
-        let extra_after = s.extra.snapshot();
+        let extra_after = state.extra.snapshot();
         let extra_changed = extra_after != extra_before;
         if extra_changed {
-            s.extra.set_version(extra_before_ver.saturating_add(1));
+            state.extra.set_version(extra_before_ver.saturating_add(1));
             println!(
                 "  barrier: extra keys {} -> {}, v {} -> {}",
                 extra_before.len(),
                 extra_after.len(),
                 extra_before_ver,
-                s.extra.version()
+                state.extra.version()
             );
             updated.push("extra");
         }
@@ -259,7 +259,7 @@ mod tests {
     #[tokio::test]
     async fn test_apply_barrier_messages_update() {
         let app = make_app();
-        let state = Arc::new(RwLock::new(make_state()));
+        let state = &mut make_state();
         let run_ids = vec![NodeKind::Start];
         let partial = NodePartial {
             messages: Some(vec![Message {
@@ -269,42 +269,39 @@ mod tests {
             extra: None,
         };
         let updated = app
-            .apply_barrier(&state, &run_ids, vec![partial])
+            .apply_barrier(state, &run_ids, vec![partial])
             .await
             .unwrap();
-        let s = state.read().await;
         assert!(updated.contains(&"messages"));
-        assert_eq!(s.messages.snapshot().last().unwrap().content, "foo");
-        assert_eq!(s.messages.version(), 2);
-        assert_eq!(s.extra.version(), 1);
+        assert_eq!(state.messages.snapshot().last().unwrap().content, "foo");
+        assert_eq!(state.messages.version(), 2);
+        assert_eq!(state.extra.version(), 1);
     }
 
     #[tokio::test]
     async fn test_apply_barrier_no_update() {
         let app = make_app();
-        let state = Arc::new(RwLock::new(make_state()));
+        let state = &mut make_state();
         let run_ids = vec![NodeKind::Start];
         let partial = NodePartial {
             messages: None,
             extra: None,
         };
         let updated = app
-            .apply_barrier(&state, &run_ids, vec![partial])
+            .apply_barrier(state, &run_ids, vec![partial])
             .await
             .unwrap();
-        let s = state.read().await;
         assert!(updated.is_empty());
-        assert_eq!(s.messages.version(), 1);
-        assert_eq!(s.extra.version(), 1);
+        assert_eq!(state.messages.version(), 1);
+        assert_eq!(state.extra.version(), 1);
     }
 
     #[tokio::test]
     async fn test_apply_barrier_saturating_version() {
         let app = make_app();
-        let state = Arc::new(RwLock::new(make_state()));
+        let state = &mut make_state();
         {
-            let mut s = state.write().await;
-            s.messages.set_version(u32::MAX);
+            state.messages.set_version(u32::MAX);
         }
         let partial = NodePartial {
             messages: Some(vec![Message {
@@ -313,18 +310,17 @@ mod tests {
             }]),
             extra: None,
         };
-        app.apply_barrier(&state, &[NodeKind::Start], vec![partial])
+        app.apply_barrier(state, &[NodeKind::Start], vec![partial])
             .await
             .unwrap();
-        let s = state.read().await;
         // saturating_add => stays at MAX
-        assert_eq!(s.messages.version(), u32::MAX);
+        assert_eq!(state.messages.version(), u32::MAX);
     }
 
     #[tokio::test]
     async fn test_apply_barrier_multiple_updates() {
         let app = make_app();
-        let state = Arc::new(RwLock::new(make_state()));
+        let state = &mut make_state();
         let partial1 = NodePartial {
             messages: Some(vec![Message {
                 role: "assistant".into(),
@@ -341,24 +337,23 @@ mod tests {
         };
         let updated = app
             .apply_barrier(
-                &state,
+                state,
                 &[NodeKind::Start, NodeKind::End],
                 vec![partial1, partial2],
             )
             .await
             .unwrap();
-        let s = state.read().await;
-        let snap = s.messages.snapshot();
+        let snap = state.messages.snapshot();
         assert!(updated.contains(&"messages"));
         assert_eq!(snap[snap.len() - 2].content, "foo");
         assert_eq!(snap[snap.len() - 1].content, "bar");
-        assert_eq!(s.messages.version(), 2);
+        assert_eq!(state.messages.version(), 2);
     }
 
     #[tokio::test]
     async fn test_apply_barrier_empty_vectors_and_maps() {
         let app = make_app();
-        let state = Arc::new(RwLock::new(make_state()));
+        let state = &mut make_state();
         // Empty messages vector -> Some(vec![]) should be treated as no-op by guard
         let empty_msgs = NodePartial {
             messages: Some(vec![]),
@@ -371,22 +366,21 @@ mod tests {
         };
         let updated = app
             .apply_barrier(
-                &state,
+                state,
                 &[NodeKind::Start, NodeKind::End],
                 vec![empty_msgs, empty_extra],
             )
             .await
             .unwrap();
-        let s = state.read().await;
         assert!(updated.is_empty());
-        assert_eq!(s.messages.version(), 1);
-        assert_eq!(s.extra.version(), 1);
+        assert_eq!(state.messages.version(), 1);
+        assert_eq!(state.extra.version(), 1);
     }
 
     #[tokio::test]
     async fn test_apply_barrier_extra_merge_and_version() {
         let app = make_app();
-        let state = Arc::new(RwLock::new(make_state()));
+        let state = &mut make_state();
 
         let mut m1 = FxHashMap::default();
         m1.insert("k1".into(), Value::String("v1".into()));
@@ -405,14 +399,13 @@ mod tests {
         };
 
         let updated = app
-            .apply_barrier(&state, &[NodeKind::Start, NodeKind::End], vec![p1, p2])
+            .apply_barrier(state, &[NodeKind::Start, NodeKind::End], vec![p1, p2])
             .await
             .unwrap();
-        let s = state.read().await;
         assert!(updated.contains(&"extra"));
-        let snap = s.extra.snapshot();
+        let snap = state.extra.snapshot();
         assert_eq!(snap.get("k1"), Some(&Value::String("v3".into())));
         assert_eq!(snap.get("k2"), Some(&Value::String("v2".into())));
-        assert_eq!(s.extra.version(), 2);
+        assert_eq!(state.extra.version(), 2);
     }
 }

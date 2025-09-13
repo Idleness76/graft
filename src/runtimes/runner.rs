@@ -1,6 +1,5 @@
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 use crate::app::App;
 use crate::channels::Channel;
@@ -230,16 +229,14 @@ impl AppRunner {
             .collect();
 
         // Apply barrier using the app's existing method
-        let state_arc = Arc::new(RwLock::new(session_state.state.clone()));
+        let mut update_state = session_state.state.clone();
         let updated_channels = self
             .app
-            .apply_barrier(&state_arc, &run_ids, node_partials)
+            .apply_barrier(&mut update_state, &run_ids, node_partials)
             .await?;
 
         // Update session state with the modified state
-        session_state.state = Arc::try_unwrap(state_arc)
-            .expect("state still borrowed")
-            .into_inner();
+        session_state.state = update_state;
 
         // Compute next frontier
         let mut next_frontier: Vec<NodeKind> = Vec::new();

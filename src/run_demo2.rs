@@ -1,7 +1,5 @@
 use rustc_hash::FxHashMap;
 use serde_json::json;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 use crate::channels::Channel;
 
@@ -48,7 +46,7 @@ pub async fn run_demo2() -> anyhow::Result<()> {
 
     // 3. Prepare scheduler with explicit concurrency limit
     let mut scheduler = Scheduler::new(2); // Try changing to 1 for serial demo
-    let state = Arc::new(RwLock::new(init));
+    let mut state = init;
     let mut step: u64 = 0;
     let mut frontier: Vec<NodeKind> = app
         .edges()
@@ -69,7 +67,7 @@ pub async fn run_demo2() -> anyhow::Result<()> {
             break;
         }
         // Take a consistent view of state for the whole superstep.
-        let snapshot = { state.read().await.snapshot() };
+        let snapshot = { state.snapshot() };
 
         // Pretty header for the superstep with snapshot versions.
         println!("\n────────────────────────────────");
@@ -148,7 +146,7 @@ pub async fn run_demo2() -> anyhow::Result<()> {
             .filter_map(|k| by_kind.remove(&k))
             .collect();
         let updated_channels = app
-            .apply_barrier(&state, &run_ids, node_partials)
+            .apply_barrier(&mut state, &run_ids, node_partials)
             .await
             .map_err(|e| anyhow::Error::msg(e.to_string()))?;
         println!("Barrier updated channels: {:?}", updated_channels);
@@ -187,9 +185,7 @@ pub async fn run_demo2() -> anyhow::Result<()> {
     }
 
     println!("\n== Final state ==");
-    let final_state = Arc::try_unwrap(state)
-        .expect("state still borrowed")
-        .into_inner();
+    let final_state = state;
     for (i, m) in final_state.messages.snapshot().iter().enumerate() {
         println!("#{:02} [{}] {}", i, m.role, m.content);
     }
