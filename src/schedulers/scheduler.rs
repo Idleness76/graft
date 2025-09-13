@@ -17,7 +17,7 @@ pub struct StepRunResult {
 }
 
 /// Frontier scheduler with version gating and bounded concurrency.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Scheduler {
     pub concurrency_limit: usize,
     /// versions_seen[node_id][channel_name] = last version observed when the node ran
