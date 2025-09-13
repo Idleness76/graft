@@ -1,6 +1,5 @@
 use super::Reducer;
 use crate::{channels::Channel, node::NodePartial, state::VersionedState};
-use rustc_hash::FxHashMap as HashMap;
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct MapMerge;
