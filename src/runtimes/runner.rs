@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::app::App;
 use crate::channels::Channel;
 use crate::node::NodePartial;
-use crate::schedulers::Scheduler;
+use crate::schedulers::{Scheduler, SchedulerState};
 use crate::state::VersionedState;
 use crate::types::NodeKind;
 
@@ -34,6 +34,7 @@ pub struct SessionState {
     pub step: u64,
     pub frontier: Vec<NodeKind>,
     pub scheduler: Scheduler,
+    pub scheduler_state: SchedulerState,
 }
 
 /// Options for step execution
@@ -118,6 +119,7 @@ impl AppRunner {
             step: 0,
             frontier,
             scheduler,
+            scheduler_state: SchedulerState::default(),
         };
 
         self.sessions.insert(session_id, session_state);
@@ -217,6 +219,7 @@ impl AppRunner {
         let step_result = session_state
             .scheduler
             .superstep(
+                &mut session_state.scheduler_state,
                 self.app.nodes(),
                 session_state.frontier.clone(),
                 snapshot.clone(),

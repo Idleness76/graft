@@ -1,4 +1,4 @@
-use super::scheduler::{Scheduler, StepRunResult};
+use super::scheduler::{Scheduler, SchedulerState, StepRunResult};
 use crate::node::{Node, NodeContext, NodePartial};
 use crate::state::StateSnapshot;
 use crate::types::NodeKind;
@@ -70,30 +70,32 @@ fn snap_with_versions(msgs_version: u32, extra_version: u32) -> StateSnapshot {
 
 #[test]
 fn test_should_run_and_record_seen() {
-    let mut sched = Scheduler::new(4);
+    let sched = Scheduler::new(4);
+    let mut state = SchedulerState::default();
     let id = "Other(\"A\")"; // format!("{:?}", NodeKind::Other("A".into()))
 
     // No record -> should run
     let snap1 = snap_with_versions(1, 1);
-    assert!(sched.should_run(id, &snap1));
+    assert!(sched.should_run(&state, id, &snap1));
 
     // Record seen -> no change -> should not run
-    sched.record_seen(id, &snap1);
-    assert!(!sched.should_run(id, &snap1));
+    sched.record_seen(&mut state, id, &snap1);
+    assert!(!sched.should_run(&state, id, &snap1));
 
     // Version bump on messages -> should run
     let snap2 = snap_with_versions(2, 1);
-    assert!(sched.should_run(id, &snap2));
+    assert!(sched.should_run(&state, id, &snap2));
 
     // Record bump, then only extra increases -> should run
-    sched.record_seen(id, &snap2);
+    sched.record_seen(&mut state, id, &snap2);
     let snap3 = snap_with_versions(2, 3);
-    assert!(sched.should_run(id, &snap3));
+    assert!(sched.should_run(&state, id, &snap3));
 }
 
 #[tokio::test]
 async fn test_superstep_skips_end_and_nochange() {
-    let mut sched = Scheduler::new(8);
+    let sched = Scheduler::new(8);
+    let mut state = SchedulerState::default();
     let nodes = make_registry();
     let frontier = vec![
         NodeKind::Other("A".into()),
@@ -104,7 +106,7 @@ async fn test_superstep_skips_end_and_nochange() {
     // First run: nothing recorded, both A and B should run; End skipped.
     let snap = snap_with_versions(1, 1);
     let res1: StepRunResult = sched
-        .superstep(&nodes, frontier.clone(), snap.clone(), 1)
+        .superstep(&mut state, &nodes, frontier.clone(), snap.clone(), 1)
         .await;
     // All ran except End
     let ran1: std::collections::HashSet<_> = res1.ran_nodes.iter().cloned().collect();
@@ -116,7 +118,7 @@ async fn test_superstep_skips_end_and_nochange() {
 
     // Record_seen happened inside superstep; with same snapshot, nothing should run now.
     let res2 = sched
-        .superstep(&nodes, frontier.clone(), snap.clone(), 2)
+        .superstep(&mut state, &nodes, frontier.clone(), snap.clone(), 2)
         .await;
     assert!(res2.ran_nodes.is_empty());
     // Both A and B plus End appear in skipped (version-gated or End)
@@ -129,7 +131,7 @@ async fn test_superstep_skips_end_and_nochange() {
     // Increase messages version -> A and B should run again
     let snap_bump = snap_with_versions(2, 1);
     let res3 = sched
-        .superstep(&nodes, frontier.clone(), snap_bump, 3)
+        .superstep(&mut state, &nodes, frontier.clone(), snap_bump, 3)
         .await;
     let ran3: std::collections::HashSet<_> = res3.ran_nodes.iter().cloned().collect();
     assert!(ran3.contains(&NodeKind::Other("A".into())));
@@ -158,9 +160,10 @@ async fn test_superstep_outputs_order_agnostic() {
 
     let frontier = vec![NodeKind::Other("A".into()), NodeKind::Other("B".into())];
     let snap = snap_with_versions(1, 1);
-    let mut sched = Scheduler::new(2);
+    let sched = Scheduler::new(2);
+    let mut state = SchedulerState::default();
 
-    let res = sched.superstep(&nodes, frontier.clone(), snap, 1).await;
+    let res = sched.superstep(&mut state, &nodes, frontier.clone(), snap, 1).await;
 
     // ran_nodes preserves scheduling order (frontier order, after gating)
     assert_eq!(
@@ -198,9 +201,10 @@ async fn test_superstep_serialized_with_limit_1() {
 
     let frontier = vec![NodeKind::Other("A".into()), NodeKind::Other("B".into())];
     let snap = snap_with_versions(1, 1);
-    let mut sched = Scheduler::new(1); // force serial execution
+    let sched = Scheduler::new(1); // force serial execution
+    let mut state = SchedulerState::default();
 
-    let res = sched.superstep(&nodes, frontier.clone(), snap, 1).await;
+    let res = sched.superstep(&mut state, &nodes, frontier.clone(), snap, 1).await;
 
     // ran_nodes preserves scheduling order
     assert_eq!(

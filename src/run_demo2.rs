@@ -5,7 +5,7 @@ use crate::channels::Channel;
 
 use super::graph::GraphBuilder;
 use super::node::{NodeA, NodeB, NodePartial};
-use super::schedulers::{Scheduler, StepRunResult};
+use super::schedulers::{Scheduler, SchedulerState, StepRunResult};
 use super::state::VersionedState;
 use super::types::NodeKind;
 
@@ -45,7 +45,8 @@ pub async fn run_demo2() -> anyhow::Result<()> {
         .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
 
     // 3. Prepare scheduler with explicit concurrency limit
-    let mut scheduler = Scheduler::new(2); // Try changing to 1 for serial demo
+    let scheduler = Scheduler::new(2); // Try changing to 1 for serial demo
+    let mut scheduler_state = SchedulerState::default();
     let mut state = init;
     let mut step: u64 = 0;
     let mut frontier: Vec<NodeKind> = app
@@ -83,7 +84,7 @@ pub async fn run_demo2() -> anyhow::Result<()> {
 
         // Use scheduler to run the frontier (scheduler decides run vs skip)
         let step_result: StepRunResult = scheduler
-            .superstep(app.nodes(), frontier.clone(), snapshot.clone(), step)
+            .superstep(&mut scheduler_state, app.nodes(), frontier.clone(), snapshot.clone(), step)
             .await;
         // Update counters and print high-level result
         for id in &step_result.ran_nodes {
@@ -155,7 +156,7 @@ pub async fn run_demo2() -> anyhow::Result<()> {
             println!("versions_seen after run:");
             for k in &run_ids {
                 let id = format!("{:?}", k);
-                if let Some(map) = scheduler.versions_seen.get(&id) {
+                    if let Some(map) = scheduler_state.versions_seen.get(&id) {
                     let mv = map.get("messages").copied().unwrap_or(0);
                     let ev = map.get("extra").copied().unwrap_or(0);
                     println!("  - {:<12} | messages v {:>3} | extra v {:>3}", id, mv, ev);

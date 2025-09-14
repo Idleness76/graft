@@ -16,12 +16,18 @@ pub struct StepRunResult {
     pub outputs: Vec<(NodeKind, NodePartial)>,
 }
 
+/// State that tracks which versions each node has seen for version gating.
+#[derive(Debug, Default, Clone)]
+pub struct SchedulerState {
+    /// versions_seen[node_id][channel_name] = last version observed when the node ran
+    pub versions_seen: FxHashMap<String, FxHashMap<String, u64>>,
+}
+
 /// Frontier scheduler with version gating and bounded concurrency.
+/// This is now stateless - all state is managed separately in SchedulerState.
 #[derive(Debug, Default, Clone)]
 pub struct Scheduler {
     pub concurrency_limit: usize,
-    /// versions_seen[node_id][channel_name] = last version observed when the node ran
-    pub versions_seen: FxHashMap<String, FxHashMap<String, u64>>,
 }
 
 impl Scheduler {
@@ -32,7 +38,6 @@ impl Scheduler {
             } else {
                 concurrency_limit
             },
-            versions_seen: FxHashMap::default(),
         }
     }
 
@@ -47,14 +52,19 @@ impl Scheduler {
 
     /// Decide if a node should run given the pre-barrier snapshot.
     /// Returns true if any channel version increased since this node last ran.
-    pub fn should_run(&self, node_id: &str, snap: &StateSnapshot) -> bool {
+    pub fn should_run(&self, state: &SchedulerState, node_id: &str, snap: &StateSnapshot) -> bool {
         let channels = Self::channel_versions(snap);
-        self.should_run_with(node_id, &channels)
+        self.should_run_with(state, node_id, &channels)
     }
 
     /// Generic form of should_run: decide based on provided (channel_name, version) pairs.
-    pub fn should_run_with(&self, node_id: &str, channels: &[(&str, u64)]) -> bool {
-        let seen = match self.versions_seen.get(node_id) {
+    pub fn should_run_with(
+        &self,
+        state: &SchedulerState,
+        node_id: &str,
+        channels: &[(&str, u64)],
+    ) -> bool {
+        let seen = match state.versions_seen.get(node_id) {
             Some(v) => v,
             None => return true, // never ran -> run
         };
@@ -68,14 +78,19 @@ impl Scheduler {
     }
 
     /// Record the versions seen for a node at the start of its execution (pre-barrier snapshot).
-    pub fn record_seen(&mut self, node_id: &str, snap: &StateSnapshot) {
+    pub fn record_seen(&self, state: &mut SchedulerState, node_id: &str, snap: &StateSnapshot) {
         let channels = Self::channel_versions(snap);
-        self.record_seen_with(node_id, &channels);
+        self.record_seen_with(state, node_id, &channels);
     }
 
     /// Generic form of record_seen: store versions for provided (channel_name, version) pairs.
-    pub fn record_seen_with(&mut self, node_id: &str, channels: &[(&str, u64)]) {
-        let entry = self
+    pub fn record_seen_with(
+        &self,
+        state: &mut SchedulerState,
+        node_id: &str,
+        channels: &[(&str, u64)],
+    ) {
+        let entry = state
             .versions_seen
             .entry(node_id.to_string())
             .or_insert_with(FxHashMap::default);
@@ -86,7 +101,8 @@ impl Scheduler {
 
     /// Run one superstep over a frontier with bounded concurrency. End nodes are skipped.
     pub async fn superstep(
-        &mut self,
+        &self,
+        state: &mut SchedulerState,
         nodes: &FxHashMap<NodeKind, Arc<dyn Node>>, // registry
         frontier: Vec<NodeKind>,                    // frontier for this step
         snap: StateSnapshot,                        // pre-barrier snapshot
@@ -103,7 +119,7 @@ impl Scheduler {
                 continue;
             }
             let id_str = format!("{:?}", k);
-            if self.should_run_with(&id_str, &channels) {
+            if self.should_run_with(state, &id_str, &channels) {
                 to_run.push(k);
             } else {
                 skipped_kinds.push(k);
@@ -140,7 +156,7 @@ impl Scheduler {
 
         // Record versions seen for nodes that ran.
         for id in &to_run_ids {
-            self.record_seen_with(id, &channels);
+            self.record_seen_with(state, id, &channels);
         }
 
         StepRunResult {
