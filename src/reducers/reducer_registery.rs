@@ -22,6 +22,7 @@ impl ReducerType {
     }
 }
 
+#[derive(Clone)]
 pub struct ReducerRegistery {
     reducer_map: FxHashMap<ChannelType, Vec<ReducerType>>,
 }
