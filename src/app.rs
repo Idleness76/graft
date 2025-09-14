@@ -6,11 +6,11 @@ use crate::channels::Channel;
 use crate::message::*;
 use crate::node::*;
 use crate::reducers::ReducerRegistery;
-use crate::schedulers::Scheduler;
 use crate::state::*;
 use crate::types::*;
 
 /// Orchestrates graph execution and applies reducers at barriers.
+#[derive(Clone)]
 pub struct App {
     nodes: FxHashMap<NodeKind, Arc<dyn Node>>,
     edges: FxHashMap<NodeKind, Vec<NodeKind>>,
@@ -39,113 +39,19 @@ impl App {
     }
 
     /// Execute until End (or no frontier). Applies reducers after each superstep.
+    /// This is now a convenience wrapper around AppRunner.
     pub async fn invoke(
         &self,
         initial_state: VersionedState,
     ) -> Result<VersionedState, Box<dyn std::error::Error + Send + Sync>> {
-        let mut state = initial_state;
-        let mut step: u64 = 0;
+        use crate::runtimes::AppRunner;
 
-        // Initial frontier = successors of Start
-        let mut frontier: Vec<NodeKind> = self
-            .edges()
-            .get(&NodeKind::Start)
-            .cloned()
-            .unwrap_or_default();
-        if frontier.is_empty() {
-            return Err("No nodes to run from START".into());
-        }
+        // Create a temporary runner and session using clone
+        let mut runner = AppRunner::new(self.clone());
+        let session_id = "temp_invoke_session".to_string();
 
-        println!("== Begin run ==");
-        // Initialize scheduler with a sensible default concurrency limit.
-        let default_limit = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(1);
-        let mut scheduler = Scheduler::new(default_limit);
-
-        loop {
-            step += 1;
-
-            // Stop if ONLY End nodes remain
-            if frontier.iter().all(|n| *n == NodeKind::End) {
-                println!("Reached END at step {}", step);
-                break;
-            }
-
-            // Snapshot for this superstep (consistent view)
-            let snapshot = { state.snapshot() };
-            println!(
-                "\n-- Superstep {} --\nmsgs={} v{}; extra_keys={} v{}",
-                step,
-                snapshot.messages.len(),
-                snapshot.messages_version,
-                snapshot.extra.len(),
-                snapshot.extra_version
-            );
-
-            // Execute via scheduler with bounded concurrency; it decides run vs skip
-            let step_result = scheduler
-                .superstep(self.nodes(), frontier.clone(), snapshot.clone(), step)
-                .await;
-
-            // Reorder outputs to match ran_nodes order expected by the barrier
-            let mut by_kind: FxHashMap<NodeKind, NodePartial> = FxHashMap::default();
-            for (kind, part) in step_result.outputs {
-                by_kind.insert(kind, part);
-            }
-            let run_ids: Vec<NodeKind> = step_result.ran_nodes.clone();
-            let node_partials: Vec<NodePartial> = run_ids
-                .iter()
-                .cloned()
-                .filter_map(|k| by_kind.remove(&k))
-                .collect();
-
-            // Barrier: merge all NodePartials per channel then apply reducers
-            let updated_channels = self
-                .apply_barrier(&mut state, &run_ids, node_partials)
-                .await?;
-
-            // Compute next frontier
-            let mut next: Vec<NodeKind> = Vec::new();
-            for id in run_ids.iter() {
-                if let Some(dests) = self.edges().get(id) {
-                    for d in dests {
-                        if !next.contains(d) {
-                            next.push(d.clone());
-                        }
-                    }
-                }
-            }
-
-            println!("Updated channels this step: {:?}", updated_channels);
-            println!("Next frontier: {:?}", next);
-
-            if next.is_empty() {
-                println!("No outgoing edges; terminating.");
-                break;
-            }
-            frontier = next;
-        }
-
-        println!("\n== Final state ==");
-        let final_state = state;
-
-        for (i, m) in final_state.messages.snapshot().iter().enumerate() {
-            println!("#{:02} [{}] {}", i, m.role, m.content);
-        }
-        println!("messages.version = {}", final_state.messages.version());
-
-        let extra_snapshot = final_state.extra.snapshot();
-        println!(
-            "extra (v {}) keys={}",
-            final_state.extra.version(),
-            extra_snapshot.len()
-        );
-        for (k, v) in extra_snapshot.iter() {
-            println!("  {k}: {v}");
-        }
-
-        Ok(final_state)
+        runner.create_session(session_id.clone(), initial_state)?;
+        runner.run_until_complete(&session_id).await
     }
 
     /// Merge NodePartial updates, invoke reducers, bump versions if content changed.
