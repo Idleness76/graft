@@ -82,6 +82,14 @@ impl AppRunner {
         }
     }
 
+    /// Create a new AppRunner from an Arc<App> (useful when sharing the same App)
+    pub fn from_arc(app: Arc<App>) -> Self {
+        Self {
+            app,
+            sessions: FxHashMap::default(),
+        }
+    }
+
     /// Initialize a new session with the given initial state
     pub fn create_session(
         &mut self,
@@ -275,6 +283,69 @@ impl AppRunner {
         })
     }
 
+    /// Run until completion (End nodes or no frontier) - the canonical execution method
+    pub async fn run_until_complete(
+        &mut self,
+        session_id: &str,
+    ) -> Result<VersionedState, Box<dyn std::error::Error + Send + Sync>> {
+        println!("== Begin run ==");
+
+        loop {
+            // Check if we're done before trying to run
+            let session_state = self
+                .sessions
+                .get(session_id)
+                .ok_or_else(|| format!("Session '{}' not found", session_id))?;
+
+            if session_state.frontier.is_empty()
+                || session_state.frontier.iter().all(|n| *n == NodeKind::End)
+            {
+                println!("Reached END at step {}", session_state.step);
+                break;
+            }
+
+            // Run one step
+            let step_result = self.run_step(session_id, StepOptions::default()).await?;
+
+            match step_result {
+                StepResult::Completed(report) => {
+                    if report.completed {
+                        break;
+                    }
+                }
+                StepResult::Paused(_) => {
+                    // This shouldn't happen with default options, but handle gracefully
+                    return Err("Unexpected pause during run_until_complete".into());
+                }
+            }
+        }
+
+        println!("\n== Final state ==");
+        let final_session = self
+            .sessions
+            .get(session_id)
+            .ok_or_else(|| format!("Session '{}' not found", session_id))?;
+        let final_state = final_session.state.clone();
+
+        // Print final state summary (matching App::invoke output)
+        for (i, m) in final_state.messages.snapshot().iter().enumerate() {
+            println!("#{:02} [{}] {}", i, m.role, m.content);
+        }
+        println!("messages.version = {}", final_state.messages.version());
+
+        let extra_snapshot = final_state.extra.snapshot();
+        println!(
+            "extra (v {}) keys={}",
+            final_state.extra.version(),
+            extra_snapshot.len()
+        );
+        for (k, v) in extra_snapshot.iter() {
+            println!("  {k}: {v}");
+        }
+
+        Ok(final_state)
+    }
+
     /// Get a snapshot of the current session state
     pub fn get_session(&self, session_id: &str) -> Option<&SessionState> {
         self.sessions.get(session_id)
@@ -360,6 +431,76 @@ mod tests {
             assert!(report.updated_channels.contains(&"messages"));
         } else {
             panic!("Expected completed step, got: {:?}", result);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_run_until_complete() {
+        let app = make_test_app();
+        let mut runner = AppRunner::new(app);
+        let initial_state = VersionedState::new_with_user_message("hello");
+
+        runner
+            .create_session("test_session".into(), initial_state)
+            .unwrap();
+
+        let result = runner.run_until_complete("test_session").await;
+        assert!(result.is_ok());
+
+        let final_state = result.unwrap();
+        assert_eq!(final_state.messages.len(), 2); // user + test node message
+        assert_eq!(final_state.messages.version(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_interrupt_before() {
+        let app = make_test_app();
+        let mut runner = AppRunner::new(app);
+        let initial_state = VersionedState::new_with_user_message("hello");
+
+        runner
+            .create_session("test_session".into(), initial_state)
+            .unwrap();
+
+        // Set interrupt before the test node
+        let options = StepOptions {
+            interrupt_before: vec![NodeKind::Other("test".into())],
+            ..Default::default()
+        };
+
+        let result = runner.run_step("test_session", options).await;
+        assert!(result.is_ok());
+
+        if let Ok(StepResult::Paused(paused)) = result {
+            assert!(matches!(paused.reason, PausedReason::BeforeNode(_)));
+        } else {
+            panic!("Expected paused step, got: {:?}", result);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_interrupt_after() {
+        let app = make_test_app();
+        let mut runner = AppRunner::new(app);
+        let initial_state = VersionedState::new_with_user_message("hello");
+
+        runner
+            .create_session("test_session".into(), initial_state)
+            .unwrap();
+
+        // Set interrupt after the "test" node (which runs in the first step)
+        let options = StepOptions {
+            interrupt_after: vec![NodeKind::Other("test".into())],
+            ..Default::default()
+        };
+
+        let result = runner.run_step("test_session", options).await;
+        assert!(result.is_ok());
+
+        if let Ok(StepResult::Paused(paused)) = result {
+            assert!(matches!(paused.reason, PausedReason::AfterNode(_)));
+        } else {
+            panic!("Expected paused step, got: {:?}", result);
         }
     }
 }
