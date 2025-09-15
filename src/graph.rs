@@ -11,9 +11,21 @@ use crate::app::*;
 use crate::node::*;
 use crate::types::*;
 
+/// Predicate for conditional edge routing: takes a StateSnapshot, returns true/false.
+pub type EdgePredicate = Arc<dyn Fn(&crate::state::StateSnapshot) -> bool + Send + Sync + 'static>;
+
+#[derive(Clone)]
+pub struct ConditionalEdge {
+    pub from: NodeKind,
+    pub yes: NodeKind,
+    pub no: NodeKind,
+    pub predicate: EdgePredicate,
+}
+
 pub struct GraphBuilder {
     pub nodes: FxHashMap<NodeKind, Arc<dyn Node>>,
     pub edges: FxHashMap<NodeKind, Vec<NodeKind>>,
+    pub conditional_edges: Vec<ConditionalEdge>,
     pub entry: Option<NodeKind>,
 }
 
@@ -22,8 +34,25 @@ impl GraphBuilder {
         Self {
             nodes: FxHashMap::default(),
             edges: FxHashMap::default(),
+            conditional_edges: Vec::new(),
             entry: None,
         }
+    }
+    /// Add a conditional edge: from -> yes/no, routed by predicate.
+    pub fn add_conditional_edge(
+        mut self,
+        from: NodeKind,
+        yes: NodeKind,
+        no: NodeKind,
+        predicate: EdgePredicate,
+    ) -> Self {
+        self.conditional_edges.push(ConditionalEdge {
+            from,
+            yes,
+            no,
+            predicate,
+        });
+        self
     }
 
     pub fn add_node(mut self, id: NodeKind, node: impl Node + 'static) -> Self {
@@ -46,6 +75,7 @@ impl GraphBuilder {
         if !self.nodes.contains_key(entry) {
             return Err(GraphCompileError::EntryNotRegistered(entry.clone()));
         }
+        // For now, App ignores conditional_edges...
         Ok(App::from_parts(self.nodes, self.edges))
     }
 }
@@ -53,6 +83,35 @@ impl GraphBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_add_conditional_edge() {
+        use crate::state::StateSnapshot;
+        let always_true: super::EdgePredicate = std::sync::Arc::new(|_s: &StateSnapshot| true);
+        let gb = super::GraphBuilder::new()
+            .add_node(super::NodeKind::Start, super::NodeA)
+            .add_node(super::NodeKind::Other("Y".into()), super::NodeA)
+            .add_node(super::NodeKind::Other("N".into()), super::NodeA)
+            .add_conditional_edge(
+                super::NodeKind::Start,
+                super::NodeKind::Other("Y".into()),
+                super::NodeKind::Other("N".into()),
+                always_true.clone(),
+            );
+        assert_eq!(gb.conditional_edges.len(), 1);
+        let ce = &gb.conditional_edges[0];
+        assert_eq!(ce.from, super::NodeKind::Start);
+        assert_eq!(ce.yes, super::NodeKind::Other("Y".into()));
+        assert_eq!(ce.no, super::NodeKind::Other("N".into()));
+        // Predicate should return true
+        let snap = StateSnapshot {
+            messages: vec![],
+            messages_version: 1,
+            extra: rustc_hash::FxHashMap::default(),
+            extra_version: 1,
+        };
+        assert!((ce.predicate)(&snap));
+    }
 
     #[test]
     /// Verifies that a new GraphBuilder is initialized with empty nodes and edges.
