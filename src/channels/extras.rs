@@ -40,7 +40,7 @@ impl Channel<ChannelValue> for ExtrasChannel {
         &mut self.value
     }
 
-    fn set_version(&mut self, version: u32) -> () {
+    fn set_version(&mut self, version: u32) {
         self.version = version
     }
 

@@ -38,7 +38,7 @@ impl Channel<ChannelValue> for MessagesChannel {
         &mut self.value
     }
 
-    fn set_version(&mut self, version: u32) -> () {
+    fn set_version(&mut self, version: u32) {
         self.version = version
     }
 
