@@ -1,6 +1,7 @@
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
+use super::checkpointer::{Checkpoint, Checkpointer, restore_session_state};
 use crate::app::App;
 use crate::channels::Channel;
 use crate::node::NodePartial;
@@ -70,24 +71,44 @@ pub enum StepResult {
 /// Stepwise execution wrapper around App that supports sessions and interrupts
 pub struct AppRunner {
     app: Arc<App>,
-    /// In-memory session storage (will be replaced with Checkpointer later)
     sessions: FxHashMap<String, SessionState>,
+    checkpointer: Option<Arc<dyn Checkpointer>>, // optional pluggable persistence
+    autosave: bool,
 }
 
 impl AppRunner {
     /// Create a new AppRunner wrapping the given App
     pub fn new(app: App) -> Self {
+        Self::with_options(app, None, true)
+    }
+
+    pub fn from_arc(app: Arc<App>) -> Self {
+        Self::with_options_arc(app, None, true)
+    }
+
+    /// Create with explicit checkpointer + autosave toggle
+    pub fn with_options(
+        app: App,
+        checkpointer: Option<Arc<dyn Checkpointer>>,
+        autosave: bool,
+    ) -> Self {
         Self {
             app: Arc::new(app),
             sessions: FxHashMap::default(),
+            checkpointer,
+            autosave,
         }
     }
-
-    /// Create a new AppRunner from an Arc<App> (useful when sharing the same App)
-    pub fn from_arc(app: Arc<App>) -> Self {
+    pub fn with_options_arc(
+        app: Arc<App>,
+        checkpointer: Option<Arc<dyn Checkpointer>>,
+        autosave: bool,
+    ) -> Self {
         Self {
             app,
             sessions: FxHashMap::default(),
+            checkpointer,
+            autosave,
         }
     }
 
@@ -97,23 +118,28 @@ impl AppRunner {
         session_id: String,
         initial_state: VersionedState,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // If checkpointer present and session exists, load instead of creating anew
+        if let Some(cp) = &self.checkpointer {
+            if let Some(stored) = cp.load_latest(&session_id).map_err(|e| e.to_string())? {
+                let restored = restore_session_state(&stored);
+                self.sessions.insert(session_id, restored);
+                return Ok(());
+            }
+        }
+
         let frontier = self
             .app
             .edges()
             .get(&NodeKind::Start)
             .cloned()
             .unwrap_or_default();
-
         if frontier.is_empty() {
             return Err("No nodes to run from START".into());
         }
-
-        // Initialize scheduler with sensible default
         let default_limit = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1);
         let scheduler = Scheduler::new(default_limit);
-
         let session_state = SessionState {
             state: initial_state,
             step: 0,
@@ -121,8 +147,11 @@ impl AppRunner {
             scheduler,
             scheduler_state: SchedulerState::default(),
         };
-
-        self.sessions.insert(session_id, session_state);
+        self.sessions
+            .insert(session_id.clone(), session_state.clone());
+        if let Some(cp) = &self.checkpointer {
+            let _ = cp.save(Checkpoint::from_session(&session_id, &session_state));
+        }
         Ok(())
     }
 
@@ -171,9 +200,14 @@ impl AppRunner {
         // Execute one superstep
         let step_report = self.run_one_superstep(&mut session_state).await?;
 
-        // Update the session in map
+        // Update the session in map & persist if configured
         self.sessions
             .insert(session_id.to_string(), session_state.clone());
+        if self.autosave {
+            if let Some(cp) = &self.checkpointer {
+                let _ = cp.save(Checkpoint::from_session(session_id, &session_state));
+            }
+        }
 
         // Check for interrupt_after
         for node in &step_report.ran_nodes {
@@ -269,6 +303,12 @@ impl AppRunner {
 
         // Update session state
         session_state.frontier = next_frontier.clone();
+        // Autosave after barrier commit
+        if self.autosave {
+            if let Some(cp) = &self.checkpointer {
+                let _ = cp.save(Checkpoint::from_session("temp_runtime", session_state));
+            }
+        }
 
         let state_versions = StateVersions {
             messages_version: session_state.state.messages.version(),
@@ -365,6 +405,7 @@ mod tests {
     use super::*;
     use crate::graph::GraphBuilder;
     use crate::node::{NodeA, NodeB, NodeContext, NodePartial};
+    use crate::runtimes::checkpointer::InMemoryCheckpointer;
     use crate::state::{StateSnapshot, VersionedState};
     use async_trait::async_trait;
 
@@ -505,5 +546,36 @@ mod tests {
         } else {
             panic!("Expected paused step, got: {:?}", result);
         }
+    }
+
+    #[tokio::test]
+    async fn test_resume_from_checkpoint() {
+        let app = make_test_app();
+        let cp = Arc::new(InMemoryCheckpointer::new());
+        let mut runner = AppRunner::with_options(app, Some(cp.clone()), true);
+        let initial_state = VersionedState::new_with_user_message("hello");
+        runner
+            .create_session("sessA".into(), initial_state)
+            .unwrap();
+        // run one step (should autosave)
+        let _ = runner
+            .run_step("sessA", StepOptions::default())
+            .await
+            .unwrap();
+        // Create a NEW runner using same checkpointer and verify it restores
+        let app2 = make_test_app();
+        let mut runner2 = AppRunner::with_options(app2, Some(cp.clone()), true);
+        // calling create_session with same id should load from checkpoint rather than reset
+        runner2
+            .create_session(
+                "sessA".into(),
+                VersionedState::new_with_user_message("ignored"),
+            )
+            .unwrap();
+        let restored = runner2.get_session("sessA").unwrap();
+        assert_eq!(restored.step, 1); // resumed after first step
+        // Complete run
+        let final_state = runner2.run_until_complete("sessA").await.unwrap();
+        assert!(final_state.messages.len() >= 2); // user + test node (possibly more if node executes again)
     }
 }
