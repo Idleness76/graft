@@ -29,6 +29,12 @@ pub struct GraphBuilder {
     pub entry: Option<NodeKind>,
 }
 
+impl Default for GraphBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GraphBuilder {
     pub fn new() -> Self {
         Self {
