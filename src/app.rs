@@ -14,6 +14,7 @@ use crate::types::*;
 pub struct App {
     nodes: FxHashMap<NodeKind, Arc<dyn Node>>,
     edges: FxHashMap<NodeKind, Vec<NodeKind>>,
+    conditional_edges: Vec<crate::graph::ConditionalEdge>,
     reducer_registery: ReducerRegistery,
 }
 
@@ -22,12 +23,17 @@ impl App {
     pub(crate) fn from_parts(
         nodes: FxHashMap<NodeKind, Arc<dyn Node>>,
         edges: FxHashMap<NodeKind, Vec<NodeKind>>,
+        conditional_edges: Vec<crate::graph::ConditionalEdge>,
     ) -> Self {
         App {
             nodes,
             edges,
+            conditional_edges,
             reducer_registery: ReducerRegistery::default(),
         }
+    }
+    pub fn conditional_edges(&self) -> &Vec<crate::graph::ConditionalEdge> {
+        &self.conditional_edges
     }
 
     pub fn nodes(&self) -> &FxHashMap<NodeKind, Arc<dyn Node>> {
@@ -158,6 +164,7 @@ mod tests {
         App {
             nodes: FxHashMap::default(),
             edges: FxHashMap::default(),
+            conditional_edges: Vec::new(),
             reducer_registery: ReducerRegistery::default(),
         }
     }

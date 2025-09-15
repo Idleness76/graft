@@ -75,8 +75,11 @@ impl GraphBuilder {
         if !self.nodes.contains_key(entry) {
             return Err(GraphCompileError::EntryNotRegistered(entry.clone()));
         }
-        // For now, App ignores conditional_edges...
-        Ok(App::from_parts(self.nodes, self.edges))
+        Ok(App::from_parts(
+            self.nodes,
+            self.edges,
+            self.conditional_edges,
+        ))
     }
 }
 
