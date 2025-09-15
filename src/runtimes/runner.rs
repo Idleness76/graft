@@ -283,14 +283,29 @@ impl AppRunner {
         // Update session state with the modified state
         session_state.state = update_state;
 
-        // Compute next frontier
+        // Compute next frontier: unconditional edges + conditional edges
         let mut next_frontier: Vec<NodeKind> = Vec::new();
+        let app_edges = self.app.edges();
+        let conditional_edges = self.app.conditional_edges();
+        let snapshot = session_state.state.snapshot();
         for id in run_ids.iter() {
-            if let Some(dests) = self.app.edges().get(id) {
+            // Unconditional edges
+            if let Some(dests) = app_edges.get(id) {
                 for d in dests {
                     if !next_frontier.contains(d) {
                         next_frontier.push(d.clone());
                     }
+                }
+            }
+            // Conditional edges
+            for ce in conditional_edges.iter().filter(|ce| &ce.from == id) {
+                let target = if (ce.predicate)(&snapshot) {
+                    &ce.yes
+                } else {
+                    &ce.no
+                };
+                if !next_frontier.contains(target) {
+                    next_frontier.push(target.clone());
                 }
             }
         }
@@ -403,13 +418,12 @@ impl AppRunner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::GraphBuilder;
+    use crate::graph::{EdgePredicate, GraphBuilder};
     use crate::node::{NodeA, NodeB, NodeContext, NodePartial};
     use crate::runtimes::checkpointer::InMemoryCheckpointer;
     use crate::state::{StateSnapshot, VersionedState};
     use async_trait::async_trait;
 
-    // Simple test node that adds a message
     struct TestNode {
         message: String,
     }
@@ -441,6 +455,76 @@ mod tests {
         builder = builder.add_edge(NodeKind::Other("test".into()), NodeKind::End);
         builder = builder.set_entry(NodeKind::Start);
         builder.compile().unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_conditional_edge_routing() {
+        // Predicate: true if extra contains key "go_yes"
+        let pred: EdgePredicate =
+            std::sync::Arc::new(|snap: &StateSnapshot| snap.extra.contains_key("go_yes"));
+        let gb = GraphBuilder::new()
+            .add_node(
+                NodeKind::Start,
+                TestNode {
+                    message: "start".into(),
+                },
+            )
+            .add_node(
+                NodeKind::Other("Y".into()),
+                TestNode {
+                    message: "yes path".into(),
+                },
+            )
+            .add_node(
+                NodeKind::Other("N".into()),
+                TestNode {
+                    message: "no path".into(),
+                },
+            )
+            .add_edge(NodeKind::Start, NodeKind::Start) // Add unconditional edge to START itself for initial frontier
+            .add_conditional_edge(
+                NodeKind::Start,
+                NodeKind::Other("Y".into()),
+                NodeKind::Other("N".into()),
+                pred.clone(),
+            )
+            .set_entry(NodeKind::Start);
+        let app = gb.compile().unwrap();
+        let mut runner = AppRunner::new(app);
+        // State with go_yes present
+        let mut state = VersionedState::new_with_user_message("hi");
+        state
+            .extra
+            .get_mut()
+            .insert("go_yes".to_string(), serde_json::json!(1));
+        runner
+            .create_session("sess1".to_string(), state.clone())
+            .unwrap();
+        let report = runner
+            .run_step("sess1", StepOptions::default())
+            .await
+            .unwrap();
+        if let StepResult::Completed(rep) = report {
+            assert!(rep.next_frontier.contains(&NodeKind::Other("Y".into())));
+            assert!(!rep.next_frontier.contains(&NodeKind::Other("N".into())));
+        } else {
+            panic!("Expected completed step");
+        }
+        // State without go_yes
+        let state2 = VersionedState::new_with_user_message("hi");
+        runner
+            .create_session("sess2".to_string(), state2.clone())
+            .unwrap();
+        let report2 = runner
+            .run_step("sess2", StepOptions::default())
+            .await
+            .unwrap();
+        if let StepResult::Completed(rep2) = report2 {
+            assert!(rep2.next_frontier.contains(&NodeKind::Other("N".into())));
+            assert!(!rep2.next_frontier.contains(&NodeKind::Other("Y".into())));
+        } else {
+            panic!("Expected completed step");
+        }
     }
 
     #[tokio::test]
