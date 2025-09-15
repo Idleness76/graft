@@ -1,3 +1,10 @@
+pub mod checkpointer;
 pub mod runner;
 
-pub use runner::{AppRunner, StepOptions, StepReport, StepResult, PausedReport, PausedReason, SessionState, StateVersions};
+pub use checkpointer::{
+    Checkpoint, Checkpointer, CheckpointerError, InMemoryCheckpointer, restore_session_state,
+};
+pub use runner::{
+    AppRunner, PausedReason, PausedReport, SessionState, StateVersions, StepOptions, StepReport,
+    StepResult,
+};
