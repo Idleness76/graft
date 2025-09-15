@@ -203,10 +203,10 @@ impl AppRunner {
         // Update the session in map & persist if configured
         self.sessions
             .insert(session_id.to_string(), session_state.clone());
-        if self.autosave {
-            if let Some(cp) = &self.checkpointer {
-                let _ = cp.save(Checkpoint::from_session(session_id, &session_state));
-            }
+        if self.autosave
+            && let Some(cp) = &self.checkpointer
+        {
+            let _ = cp.save(Checkpoint::from_session(session_id, &session_state));
         }
 
         // Check for interrupt_after
@@ -318,12 +318,6 @@ impl AppRunner {
 
         // Update session state
         session_state.frontier = next_frontier.clone();
-        // Autosave after barrier commit
-        if self.autosave {
-            if let Some(cp) = &self.checkpointer {
-                let _ = cp.save(Checkpoint::from_session("temp_runtime", session_state));
-            }
-        }
 
         let state_versions = StateVersions {
             messages_version: session_state.state.messages.version(),
