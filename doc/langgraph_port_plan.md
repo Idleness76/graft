@@ -115,7 +115,7 @@ Note: We do NOT add FanOut. Supersteps already execute the frontier concurrently
 Goals:
 - Add `AppRunner` and `Checkpointer` with in-memory backend.
 - Introduce conditional edges evaluated post‑barrier.
-- Add a minimal `llm` adapter and `LlmChatNode` (non‑streaming)
+- RuntimeConfig
 
 Tasks:
 - Add `src/runtime/runner.rs` (`AppRunner`) with:
@@ -124,21 +124,24 @@ Tasks:
 - Add `src/runtime/checkpointer.rs` with trait and `InMemoryCheckpointer`.
 - Extend `GraphBuilder` with conditional edges (stored alongside existing adjacency), and extend the next‑frontier computation to evaluate conditions against the new snapshot.
 - Add `src/llm/rig_adapter.rs` and an example `LlmChatNode` writing to `messages`.
-- Example: `examples/langgraph_basic_chat.rs` — user message → LLM reply → End; demonstrate `run_step` and pause after each step.
+- RuntimeConfig goes in tandem with the checkpointer, we want to be able to pass at least a session id to be saved for each session row.
+- add RuntimeConfig, pass along to builder (or something like app.withConfig(RuntimeConfig) before invoke) - should contain just a session_id for now (set by the user before execution of graph)
+- Read session_id when initalizing checkpointer and adding that as a column to the SQLx SQLite migration.
 
 Outputs:
 - Session stepping without changing Node/Barrier; in-memory checkpoints; conditional routing MVP; basic Rig LLM node.
 
-### Week 2 — Postgres Checkpointer, Interrupts, Streaming Events, Error Channel
+### Week 2 — SQLite Checkpointer, Interrupts, Streaming Events, Error Channel
 
 Goals:
-- Add `PostgresCheckpointer` (SQLx, feature `postgres`), with migration for a `checkpoints` table.
+- Add `SQLiteCheckpointer` (SQLx, feature `SQLite`), with migration for a `checkpoints` table.
 - Implement interrupts thoroughly (before/after/per-step) with persisted pause reasons.
 - Add event bus and stream node/step events; integrate token streaming from Rig when available.
 - Add `ChannelType::Error` + reducer; runner retry policy hooks.
+And then to be able to resume from checkpoints by reusing that session id
 
 Tasks:
-- `src/runtime/checkpointer_postgres.rs` (feature `postgres`) with `connect(url)`, `save/load/list`, and schema migration.
+- `src/runtime/checkpointer_SQLite.rs` (feature `SQLite`) with `connect(url)`, `save/load/list`, and schema migration.
 - Interrupt semantics in `AppRunner` (return `Paused` report with context: step, frontier, node name, reason).
 - `src/runtime/events.rs`: event types + default sink; publish during scheduling and barrier.
 - Extend `LlmChatNode` to stream tokens to events; final append to `messages` at barrier remains via `NodePartial`.
