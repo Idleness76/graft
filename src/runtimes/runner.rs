@@ -119,12 +119,12 @@ impl AppRunner {
         initial_state: VersionedState,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // If checkpointer present and session exists, load instead of creating anew
-        if let Some(cp) = &self.checkpointer {
-            if let Some(stored) = cp.load_latest(&session_id).map_err(|e| e.to_string())? {
-                let restored = restore_session_state(&stored);
-                self.sessions.insert(session_id, restored);
-                return Ok(());
-            }
+        if let Some(cp) = &self.checkpointer
+            && let Some(stored) = cp.load_latest(&session_id).map_err(|e| e.to_string())?
+        {
+            let restored = restore_session_state(&stored);
+            self.sessions.insert(session_id, restored);
+            return Ok(());
         }
 
         let frontier = self
