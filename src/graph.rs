@@ -13,7 +13,7 @@ use crate::runtimes::RuntimeConfig;
 use crate::types::*;
 
 /// Predicate for conditional edge routing: takes a StateSnapshot, returns true/false.
-pub type EdgePredicate = Arc<dyn Fn(&crate::state::StateSnapshot) -> bool + Send + Sync + 'static>;
+pub type EdgePredicate = Arc<dyn Fn(crate::state::StateSnapshot) -> bool + Send + Sync + 'static>;
 
 #[derive(Clone)]
 pub struct ConditionalEdge {
@@ -86,7 +86,7 @@ impl GraphBuilder {
 
     pub fn compile(self) -> Result<App, GraphCompileError> {
         let entry = self.entry.as_ref().ok_or(GraphCompileError::MissingEntry)?;
-        if !self.nodes.contains_key(entry) {
+        if !self.edges.contains_key(entry) {
             return Err(GraphCompileError::EntryNotRegistered(entry.clone()));
         }
         Ok(App::from_parts(
@@ -105,7 +105,7 @@ mod tests {
     #[test]
     fn test_add_conditional_edge() {
         use crate::state::StateSnapshot;
-        let always_true: super::EdgePredicate = std::sync::Arc::new(|_s: &StateSnapshot| true);
+        let always_true: super::EdgePredicate = std::sync::Arc::new(|_s: StateSnapshot| true);
         let gb = super::GraphBuilder::new()
             .add_node(super::NodeKind::Start, super::NodeA)
             .add_node(super::NodeKind::Other("Y".into()), super::NodeA)
@@ -128,7 +128,7 @@ mod tests {
             extra: rustc_hash::FxHashMap::default(),
             extra_version: 1,
         };
-        assert!((ce.predicate)(&snap));
+        assert!((ce.predicate)(snap));
     }
 
     #[test]

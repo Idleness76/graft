@@ -305,9 +305,12 @@ impl AppRunner {
             }
             // Conditional edges
             for ce in conditional_edges.iter().filter(|ce| &ce.from == id) {
-                let target = if (ce.predicate)(&snapshot) {
+                println!("running conditional edge from {:?}", ce.from);
+                let target = if (ce.predicate)(snapshot.clone()) {
+                    println!("conditional edge routing to {:?}", &ce.yes);
                     &ce.yes
                 } else {
+                    println!("conditional edge routing to {:?}", &ce.no);
                     &ce.no
                 };
                 if !next_frontier.contains(target) {
@@ -461,7 +464,7 @@ mod tests {
     async fn test_conditional_edge_routing() {
         // Predicate: true if extra contains key "go_yes"
         let pred: EdgePredicate =
-            std::sync::Arc::new(|snap: &StateSnapshot| snap.extra.contains_key("go_yes"));
+            std::sync::Arc::new(|snap: StateSnapshot| snap.extra.contains_key("go_yes"));
         let gb = GraphBuilder::new()
             .add_node(
                 NodeKind::Start,

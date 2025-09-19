@@ -1,12 +1,3 @@
-use async_trait::async_trait;
-use rig::client::CompletionClient;
-use rig::completion::CompletionModelDyn;
-use rig::{completion::Prompt, providers::ollama};
-use rustc_hash::FxHashMap;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::u64;
-
 use super::graph::GraphBuilder;
 use super::node::{Node, NodeContext, NodePartial};
 use super::schedulers::{Scheduler, SchedulerState, StepRunResult};
@@ -14,6 +5,13 @@ use super::state::{StateSnapshot, VersionedState};
 use super::types::NodeKind;
 use crate::channels::Channel;
 use crate::message::*;
+use async_trait::async_trait;
+use rig::client::CompletionClient;
+use rig::completion::CompletionModelDyn;
+use rig::providers::ollama;
+use rustc_hash::FxHashMap;
+use serde_json::{Value, json};
+use std::sync::Arc;
 
 struct NodeA;
 
@@ -61,15 +59,27 @@ struct NodeB;
 #[async_trait]
 impl Node for NodeB {
     async fn run(&self, snapshot: StateSnapshot, ctx: NodeContext) -> NodePartial {
+        let cat_iterations = serde_json::from_value::<i32>(
+            snapshot
+                .extra
+                .get("cat iterations")
+                .unwrap_or(&json!(0))
+                .clone(),
+        )
+        .unwrap();
+
         let joke_response = snapshot.messages.last().unwrap();
         let client = ollama::Client::new();
         let completion_model = client.completion_model("gemma3");
 
-        println!("first joke run is: {}", joke_response.content);
+        println!(
+            "first joke run is: {}, number of cat iterations is {}",
+            joke_response.content, cat_iterations
+        );
 
         let completion_request = completion_model
             .completion_request(rig::completion::Message::user(format!(
-                "here's my baby themed joke: {}. \n add a line about a cat and return the full new joke with the cat addition",
+                "here's my baby themed joke: {}. \n add a line about a cat and return the full new joke with the cat addition. \n if a line about a cat already exists, overwrite it with a funnier one liner",
                 joke_response.content.clone()
             )))
             .preamble("you are comedy writer AI assistant, do exactly as the prompt requires you to and deliver your response as a single succint line of text".to_owned())
@@ -82,6 +92,9 @@ impl Node for NodeB {
             .unwrap();
 
         println!("model response is: {:?}", response);
+
+        let mut extra: FxHashMap<String, Value> = FxHashMap::default();
+        extra.insert("cat iterations".into(), json!(cat_iterations + 1));
         NodePartial {
             messages: Some(
                 response
@@ -93,7 +106,7 @@ impl Node for NodeB {
                     })
                     .collect(),
             ),
-            extra: None,
+            extra: Some(extra),
         }
     }
 }
@@ -110,18 +123,34 @@ pub async fn run_demo3() -> anyhow::Result<()> {
 
     // 1. Initial state with a user message + seeded extra data
     let mut init = VersionedState::new_with_user_message("Write a joke about babies");
-
+    init.extra
+        .get_mut()
+        .insert("cat iterations".into(), json!(0));
     // 2. Build a richer graph with some fan-out and re-visits:
     //    Start -> A, Start -> B, A -> B, B -> End
     //    This ensures Step 1 runs both A and B concurrently; Step 2 runs B again due to A's output.
     let app = GraphBuilder::new()
-        .add_node(NodeKind::Start, NodeA)
         .add_node(NodeKind::Other("A".into()), NodeA)
         .add_node(NodeKind::Other("B".into()), NodeB)
-        .add_node(NodeKind::End, NodeB)
         .add_edge(NodeKind::Start, NodeKind::Other("A".into()))
         .add_edge(NodeKind::Other("A".into()), NodeKind::Other("B".into()))
-        .add_edge(NodeKind::Other("B".into()), NodeKind::End)
+        .add_conditional_edge(
+            NodeKind::Other("B".into()),
+            NodeKind::End,
+            NodeKind::Other("B".into()),
+            Arc::new(|snapshot: StateSnapshot| {
+                serde_json::from_value::<i32>(
+                    snapshot
+                        .extra
+                        .get("cat iterations")
+                        .unwrap_or(&json!(0))
+                        .clone(),
+                )
+                .unwrap()
+                    > 1
+            }),
+        )
+        //.add_edge(NodeKind::Other("B".into()), NodeKind::End)
         .set_entry(NodeKind::Start)
         .compile()
         .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
