@@ -6,6 +6,8 @@ use crate::channels::Channel;
 use crate::message::*;
 use crate::node::*;
 use crate::reducers::ReducerRegistery;
+use crate::runtimes::CheckpointerType;
+use crate::runtimes::RuntimeConfig;
 use crate::state::*;
 use crate::types::*;
 
@@ -16,6 +18,7 @@ pub struct App {
     edges: FxHashMap<NodeKind, Vec<NodeKind>>,
     conditional_edges: Vec<crate::graph::ConditionalEdge>,
     reducer_registery: ReducerRegistery,
+    runtime_config: RuntimeConfig,
 }
 
 impl App {
@@ -24,12 +27,14 @@ impl App {
         nodes: FxHashMap<NodeKind, Arc<dyn Node>>,
         edges: FxHashMap<NodeKind, Vec<NodeKind>>,
         conditional_edges: Vec<crate::graph::ConditionalEdge>,
+        runtime_config: RuntimeConfig,
     ) -> Self {
         App {
             nodes,
             edges,
             conditional_edges,
             reducer_registery: ReducerRegistery::default(),
+            runtime_config,
         }
     }
     pub fn conditional_edges(&self) -> &Vec<crate::graph::ConditionalEdge> {
@@ -53,8 +58,14 @@ impl App {
         use crate::runtimes::AppRunner;
 
         // Create a temporary runner and session using clone
-        let mut runner = AppRunner::new(self.clone());
-        let session_id = "temp_invoke_session".to_string();
+        let mut runner = AppRunner::new(
+            self.clone(),
+            self.runtime_config.checkpointer.as_ref().unwrap().clone(),
+        );
+        let session_id = match &self.runtime_config.session_id {
+            Some(session_id) => session_id.clone(),
+            None => "temp_invoke_session".to_string(),
+        };
 
         runner.create_session(session_id.clone(), initial_state)?;
         runner.run_until_complete(&session_id).await
@@ -166,6 +177,7 @@ mod tests {
             edges: FxHashMap::default(),
             conditional_edges: Vec::new(),
             reducer_registery: ReducerRegistery::default(),
+            runtime_config: RuntimeConfig::default(),
         }
     }
 

@@ -9,6 +9,7 @@ pub enum GraphCompileError {
 
 use crate::app::*;
 use crate::node::*;
+use crate::runtimes::RuntimeConfig;
 use crate::types::*;
 
 /// Predicate for conditional edge routing: takes a StateSnapshot, returns true/false.
@@ -27,6 +28,7 @@ pub struct GraphBuilder {
     pub edges: FxHashMap<NodeKind, Vec<NodeKind>>,
     pub conditional_edges: Vec<ConditionalEdge>,
     pub entry: Option<NodeKind>,
+    pub runtime_config: RuntimeConfig,
 }
 
 impl Default for GraphBuilder {
@@ -42,6 +44,7 @@ impl GraphBuilder {
             edges: FxHashMap::default(),
             conditional_edges: Vec::new(),
             entry: None,
+            runtime_config: RuntimeConfig::default(),
         }
     }
     /// Add a conditional edge: from -> yes/no, routed by predicate.
@@ -76,6 +79,11 @@ impl GraphBuilder {
         self
     }
 
+    pub fn with_runtime_config(mut self, runtime_config: RuntimeConfig) -> Self {
+        self.runtime_config = runtime_config;
+        self
+    }
+
     pub fn compile(self) -> Result<App, GraphCompileError> {
         let entry = self.entry.as_ref().ok_or(GraphCompileError::MissingEntry)?;
         if !self.nodes.contains_key(entry) {
@@ -85,6 +93,7 @@ impl GraphBuilder {
             self.nodes,
             self.edges,
             self.conditional_edges,
+            self.runtime_config,
         ))
     }
 }
