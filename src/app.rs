@@ -6,6 +6,7 @@ use crate::channels::Channel;
 use crate::message::*;
 use crate::node::*;
 use crate::reducers::ReducerRegistery;
+use crate::runtimes::RuntimeConfig;
 use crate::state::*;
 use crate::types::*;
 
@@ -16,6 +17,7 @@ pub struct App {
     edges: FxHashMap<NodeKind, Vec<NodeKind>>,
     conditional_edges: Vec<crate::graph::ConditionalEdge>,
     reducer_registery: ReducerRegistery,
+    runtime_config: RuntimeConfig,
 }
 
 impl App {
@@ -24,12 +26,14 @@ impl App {
         nodes: FxHashMap<NodeKind, Arc<dyn Node>>,
         edges: FxHashMap<NodeKind, Vec<NodeKind>>,
         conditional_edges: Vec<crate::graph::ConditionalEdge>,
+        runtime_config: RuntimeConfig,
     ) -> Self {
         App {
             nodes,
             edges,
             conditional_edges,
             reducer_registery: ReducerRegistery::default(),
+            runtime_config,
         }
     }
     pub fn conditional_edges(&self) -> &Vec<crate::graph::ConditionalEdge> {
@@ -166,6 +170,7 @@ mod tests {
             edges: FxHashMap::default(),
             conditional_edges: Vec::new(),
             reducer_registery: ReducerRegistery::default(),
+            runtime_config: RuntimeConfig::default(),
         }
     }
 

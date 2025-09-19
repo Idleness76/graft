@@ -2,6 +2,7 @@ use crate::{runtimes::checkpointer, utils::id_generator};
 
 use super::CheckpointerType;
 
+#[derive(Clone, Debug)]
 pub struct RuntimeConfig {
     pub session_id: Option<String>,
     pub checkpointer: Option<CheckpointerType>,

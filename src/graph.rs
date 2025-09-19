@@ -93,6 +93,7 @@ impl GraphBuilder {
             self.nodes,
             self.edges,
             self.conditional_edges,
+            self.runtime_config,
         ))
     }
 }
