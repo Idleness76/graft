@@ -90,10 +90,7 @@ impl Scheduler {
         node_id: &str,
         channels: &[(&str, u64)],
     ) {
-        let entry = state
-            .versions_seen
-            .entry(node_id.to_string())
-            .or_insert_with(FxHashMap::default);
+        let entry = state.versions_seen.entry(node_id.to_string()).or_default();
         for (name, ver) in channels.iter() {
             entry.insert((*name).to_string(), *ver);
         }

@@ -113,7 +113,7 @@ async fn test_superstep_skips_end_and_nochange() {
     assert!(ran1.contains(&NodeKind::Other("A".into())));
     assert!(ran1.contains(&NodeKind::Other("B".into())));
     assert!(!ran1.contains(&NodeKind::End));
-    assert!(res1.skipped_nodes.iter().any(|s| *s == NodeKind::End));
+    assert!(res1.skipped_nodes.contains(&NodeKind::End));
     assert_eq!(res1.outputs.len(), 2);
 
     // Record_seen happened inside superstep; with same snapshot, nothing should run now.
@@ -163,7 +163,9 @@ async fn test_superstep_outputs_order_agnostic() {
     let sched = Scheduler::new(2);
     let mut state = SchedulerState::default();
 
-    let res = sched.superstep(&mut state, &nodes, frontier.clone(), snap, 1).await;
+    let res = sched
+        .superstep(&mut state, &nodes, frontier.clone(), snap, 1)
+        .await;
 
     // ran_nodes preserves scheduling order (frontier order, after gating)
     assert_eq!(
@@ -204,7 +206,9 @@ async fn test_superstep_serialized_with_limit_1() {
     let sched = Scheduler::new(1); // force serial execution
     let mut state = SchedulerState::default();
 
-    let res = sched.superstep(&mut state, &nodes, frontier.clone(), snap, 1).await;
+    let res = sched
+        .superstep(&mut state, &nodes, frontier.clone(), snap, 1)
+        .await;
 
     // ran_nodes preserves scheduling order
     assert_eq!(

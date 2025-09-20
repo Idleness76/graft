@@ -1,13 +1,14 @@
 use super::graph::GraphBuilder;
 use super::node::{Node, NodeContext, NodePartial};
-use super::schedulers::{Scheduler, SchedulerState, StepRunResult};
+
 use super::state::{StateSnapshot, VersionedState};
 use super::types::NodeKind;
 use crate::channels::Channel;
 use crate::message::*;
+use crate::runtimes::{CheckpointerType, RuntimeConfig};
 use async_trait::async_trait;
 use rig::client::CompletionClient;
-use rig::completion::CompletionModelDyn;
+use rig::completion::CompletionModel;
 use rig::providers::ollama;
 use rustc_hash::FxHashMap;
 use serde_json::{Value, json};
@@ -17,7 +18,7 @@ struct NodeA;
 
 #[async_trait]
 impl Node for NodeA {
-    async fn run(&self, snapshot: StateSnapshot, ctx: NodeContext) -> NodePartial {
+    async fn run(&self, snapshot: StateSnapshot, _ctx: NodeContext) -> NodePartial {
         //this will be the first node to run, first message should be the user prompt
         // can validate ctx.step if necessary
         let user_prompt = snapshot.messages.last().unwrap();
@@ -58,7 +59,7 @@ struct NodeB;
 
 #[async_trait]
 impl Node for NodeB {
-    async fn run(&self, snapshot: StateSnapshot, ctx: NodeContext) -> NodePartial {
+    async fn run(&self, snapshot: StateSnapshot, _ctx: NodeContext) -> NodePartial {
         let cat_iterations = serde_json::from_value::<i32>(
             snapshot
                 .extra
@@ -152,25 +153,16 @@ pub async fn run_demo3() -> anyhow::Result<()> {
         )
         //.add_edge(NodeKind::Other("B".into()), NodeKind::End)
         .set_entry(NodeKind::Start)
+        .with_runtime_config(RuntimeConfig {
+            session_id: Some("alads_7".into()),
+            checkpointer: Some(CheckpointerType::SQLite),
+            sqlite_db_name: None,
+        })
         .compile()
         .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
 
     let final_state = app.invoke(init).await.unwrap();
 
-    println!("\n== Final state ==");
-    for (i, m) in final_state.messages.snapshot().iter().enumerate() {
-        println!("#{:02} [{}] {}", i, m.role, m.content);
-    }
-    println!("messages.version = {}", final_state.messages.version());
-    let extra_snapshot = final_state.extra.snapshot();
-    println!(
-        "extra (v {}) keys={}",
-        final_state.extra.version(),
-        extra_snapshot.len()
-    );
-    for (k, v) in extra_snapshot.iter() {
-        println!("  {k}: {v}");
-    }
     println!("== Demo3 complete ==");
     // Recap totals
 

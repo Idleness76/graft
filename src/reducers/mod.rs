@@ -1,14 +1,14 @@
 mod add_messages;
 mod append_vec;
 mod map_merge;
-mod reducer_registery;
+mod reducer_registry;
 
 pub use add_messages::AddMessages;
 /* AppendVec temporarily disabled (implementation commented out in append_vec.rs)
 pub use append_vec::AppendVec;
 */
 pub use map_merge::MapMerge;
-pub use reducer_registery::*;
+pub use reducer_registry::*;
 
 use crate::node::NodePartial;
 use crate::state::VersionedState;

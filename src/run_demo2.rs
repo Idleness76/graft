@@ -84,7 +84,13 @@ pub async fn run_demo2() -> anyhow::Result<()> {
 
         // Use scheduler to run the frontier (scheduler decides run vs skip)
         let step_result: StepRunResult = scheduler
-            .superstep(&mut scheduler_state, app.nodes(), frontier.clone(), snapshot.clone(), step)
+            .superstep(
+                &mut scheduler_state,
+                app.nodes(),
+                frontier.clone(),
+                snapshot.clone(),
+                step,
+            )
             .await;
         // Update counters and print high-level result
         for id in &step_result.ran_nodes {
@@ -156,7 +162,7 @@ pub async fn run_demo2() -> anyhow::Result<()> {
             println!("versions_seen after run:");
             for k in &run_ids {
                 let id = format!("{:?}", k);
-                    if let Some(map) = scheduler_state.versions_seen.get(&id) {
+                if let Some(map) = scheduler_state.versions_seen.get(&id) {
                     let mv = map.get("messages").copied().unwrap_or(0);
                     let ev = map.get("extra").copied().unwrap_or(0);
                     println!("  - {:<12} | messages v {:>3} | extra v {:>3}", id, mv, ev);

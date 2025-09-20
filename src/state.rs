@@ -75,7 +75,7 @@ mod tests {
             .insert("k".into(), Value::String("v".into()));
         // snapshot should be unaffected
         assert_eq!(snap.messages[0].content, "x");
-        assert!(snap.extra.get("k").is_none());
+        assert!(!snap.extra.contains_key("k"));
     }
 
     #[test]
@@ -112,6 +112,6 @@ mod tests {
             cloned.extra.snapshot().get("k1"),
             Some(&Value::String("v1".into()))
         );
-        assert!(cloned.extra.snapshot().get("k2").is_none());
+        assert!(!cloned.extra.snapshot().contains_key("k2"));
     }
 }

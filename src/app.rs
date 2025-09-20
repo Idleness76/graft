@@ -5,9 +5,8 @@ use std::sync::Arc;
 use crate::channels::Channel;
 use crate::message::*;
 use crate::node::*;
-use crate::reducers::ReducerRegistery;
-use crate::runtimes::CheckpointerType;
-use crate::runtimes::RuntimeConfig;
+use crate::reducers::ReducerRegistry;
+use crate::runtimes::{CheckpointerType, RuntimeConfig, SessionInit};
 use crate::state::*;
 use crate::types::*;
 
@@ -17,7 +16,7 @@ pub struct App {
     nodes: FxHashMap<NodeKind, Arc<dyn Node>>,
     edges: FxHashMap<NodeKind, Vec<NodeKind>>,
     conditional_edges: Vec<crate::graph::ConditionalEdge>,
-    reducer_registery: ReducerRegistery,
+    reducer_registery: ReducerRegistry,
     runtime_config: RuntimeConfig,
 }
 
@@ -33,7 +32,7 @@ impl App {
             nodes,
             edges,
             conditional_edges,
-            reducer_registery: ReducerRegistery::default(),
+            reducer_registery: ReducerRegistry::default(),
             runtime_config,
         }
     }
@@ -49,6 +48,10 @@ impl App {
         &self.edges
     }
 
+    pub fn runtime_config(&self) -> &RuntimeConfig {
+        &self.runtime_config
+    }
+
     /// Execute until End (or no frontier). Applies reducers after each superstep.
     /// This is now a convenience wrapper around AppRunner.
     pub async fn invoke(
@@ -57,17 +60,32 @@ impl App {
     ) -> Result<VersionedState, Box<dyn std::error::Error + Send + Sync>> {
         use crate::runtimes::AppRunner;
 
-        // Create a temporary runner and session using clone
-        let mut runner = AppRunner::new(
-            self.clone(),
-            self.runtime_config.checkpointer.as_ref().unwrap().clone(),
-        );
-        let session_id = match &self.runtime_config.session_id {
-            Some(session_id) => session_id.clone(),
-            None => "temp_invoke_session".to_string(),
-        };
+        // Determine checkpointer type (default to InMemory if none supplied)
+        let checkpointer_type = self
+            .runtime_config
+            .checkpointer
+            .clone()
+            .unwrap_or(CheckpointerType::InMemory);
 
-        runner.create_session(session_id.clone(), initial_state)?;
+        // Create async runner
+        let mut runner = AppRunner::new(self.clone(), checkpointer_type).await;
+
+        let session_id = self
+            .runtime_config
+            .session_id
+            .clone()
+            .unwrap_or_else(|| "temp_invoke_session".to_string());
+
+        let init_state = runner
+            .create_session(session_id.clone(), initial_state)
+            .await?;
+
+        if let SessionInit::Resumed { checkpoint_step } = init_state {
+            println!(
+                "Resuming session '{}' from checkpoint at step {}",
+                session_id, checkpoint_step
+            );
+        }
         runner.run_until_complete(&session_id).await
     }
 
@@ -86,19 +104,19 @@ impl App {
             let fallback = NodeKind::Other("?".to_string());
             let nid = run_ids.get(i).unwrap_or(&fallback);
 
-            if let Some(ms) = &p.messages {
-                if !ms.is_empty() {
-                    println!("  {:?} -> messages: +{}", nid, ms.len());
-                    msgs_all.extend(ms.clone());
-                }
+            if let Some(ms) = &p.messages
+                && !ms.is_empty()
+            {
+                println!("  {:?} -> messages: +{}", nid, ms.len());
+                msgs_all.extend(ms.clone());
             }
 
-            if let Some(ex) = &p.extra {
-                if !ex.is_empty() {
-                    println!("  {:?} -> extra: +{} keys", nid, ex.len());
-                    for (k, v) in ex {
-                        extra_all.insert(k.clone(), v.clone());
-                    }
+            if let Some(ex) = &p.extra
+                && !ex.is_empty()
+            {
+                println!("  {:?} -> extra: +{} keys", nid, ex.len());
+                for (k, v) in ex {
+                    extra_all.insert(k.clone(), v.clone());
                 }
             }
         }
@@ -176,7 +194,7 @@ mod tests {
             nodes: FxHashMap::default(),
             edges: FxHashMap::default(),
             conditional_edges: Vec::new(),
-            reducer_registery: ReducerRegistery::default(),
+            reducer_registery: ReducerRegistry::default(),
             runtime_config: RuntimeConfig::default(),
         }
     }

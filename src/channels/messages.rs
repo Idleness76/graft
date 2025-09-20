@@ -30,6 +30,10 @@ impl Channel<ChannelValue> for MessagesChannel {
         self.value.len()
     }
 
+    fn is_empty(&self) -> bool {
+        self.value.is_empty()
+    }
+
     fn version(&self) -> u32 {
         self.version
     }
