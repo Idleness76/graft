@@ -207,14 +207,10 @@ mod tests {
             .add_edge(NodeKind::Start, NodeKind::End)
             .set_entry(NodeKind::Other("NotRegistered".to_string()));
         let result = gb.compile();
-        match result {
-            Err(GraphCompileError::EntryNotRegistered(NodeKind::Other(ref s)))
-                if s == "NotRegistered" =>
-            {
-                ()
-            }
-            _ => panic!("Expected EntryNotRegistered error for 'NotRegistered'"),
-        }
+        assert!(matches!(
+            result,
+            Err(GraphCompileError::EntryNotRegistered(NodeKind::Other(ref s))) if s == "NotRegistered"
+        ));
     }
 
     #[test]

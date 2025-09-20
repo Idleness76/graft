@@ -23,7 +23,7 @@ impl ReducerType {
 }
 
 #[derive(Clone)]
-pub struct ReducerRegistery {
+pub struct ReducerRegistry {
     reducer_map: FxHashMap<ChannelType, Vec<ReducerType>>,
 }
 
@@ -46,7 +46,7 @@ fn channel_guard(channel: &ChannelType, partial: &NodePartial) -> bool {
     }
 }
 
-impl Default for ReducerRegistery {
+impl Default for ReducerRegistry {
     fn default() -> Self {
         let mut reducer_map: FxHashMap<ChannelType, Vec<ReducerType>> = FxHashMap::default();
 
@@ -60,11 +60,11 @@ impl Default for ReducerRegistery {
             vec![ReducerType::JsonShallowMerge(MapMerge)],
         );
 
-        ReducerRegistery { reducer_map }
+        ReducerRegistry { reducer_map }
     }
 }
 
-impl ReducerRegistery {
+impl ReducerRegistry {
     pub fn try_update(
         &self,
         channel_type: ChannelType,
@@ -82,13 +82,10 @@ impl ReducerRegistery {
             }
             Ok(())
         } else {
-            Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "could not find reducers for given channel: {:?}",
-                    channel_type
-                ),
-            )))
+            Err(Box::new(std::io::Error::other(format!(
+                "could not find reducers for given channel: {:?}",
+                channel_type
+            ))))
         }
     }
 

@@ -59,9 +59,24 @@ pub enum CheckpointerError {
     Other(String),
 }
 
+/// Selects the backing implementation of the `Checkpointer` trait.
+///
+/// Variants:
+/// * `InMemory` – Volatile process‑local storage. Fast, non‑durable; suitable for
+///   tests and ephemeral runs.
+/// * `SQLite` – Durable, file (or memory) backed storage using `SQLiteCheckpointer`
+///   (see `runtimes::checkpointer_sqlite`). Persists step history and the latest
+///   snapshot for session resumption.
+///
+/// Note:
+/// The runtime previously had an unreachable wildcard match when exhaustively
+/// enumerating these variants. If additional variants are added in the future,
+/// they should be explicitly matched (or a deliberate catch‑all retained).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CheckpointerType {
+    /// In‑memory (non‑durable) checkpointing.
     InMemory,
+    /// SQLite‑backed durable checkpointing (see `SQLiteCheckpointer`).
     SQLite,
 }
 
@@ -85,10 +100,18 @@ pub type Result<T> = std::result::Result<T, CheckpointerError>;
 /// * `save` replaces the latest checkpoint for the session (idempotent on identical input).
 /// * `load_latest` returns `Ok(None)` if no checkpoint exists.
 /// * All methods are sync for now; async backends can add async wrappers later.
+use async_trait::async_trait;
+
+#[async_trait]
 pub trait Checkpointer: Send + Sync {
-    fn save(&self, checkpoint: Checkpoint) -> Result<()>;
-    fn load_latest(&self, session_id: &str) -> Result<Option<Checkpoint>>;
-    fn list_sessions(&self) -> Result<Vec<String>>;
+    /// Persist (replace) the latest checkpoint for a session.
+    async fn save(&self, checkpoint: Checkpoint) -> Result<()>;
+
+    /// Load the latest checkpoint for a session (Ok(None) if not found).
+    async fn load_latest(&self, session_id: &str) -> Result<Option<Checkpoint>>;
+
+    /// List all session IDs known to the backend.
+    async fn list_sessions(&self) -> Result<Vec<String>>;
 }
 
 /// Simple in‑memory checkpointer. Stores only the *latest* checkpoint per session.
@@ -105,8 +128,9 @@ impl InMemoryCheckpointer {
     }
 }
 
+#[async_trait]
 impl Checkpointer for InMemoryCheckpointer {
-    fn save(&self, checkpoint: Checkpoint) -> Result<()> {
+    async fn save(&self, checkpoint: Checkpoint) -> Result<()> {
         let mut map = self
             .inner
             .write()
@@ -115,7 +139,7 @@ impl Checkpointer for InMemoryCheckpointer {
         Ok(())
     }
 
-    fn load_latest(&self, session_id: &str) -> Result<Option<Checkpoint>> {
+    async fn load_latest(&self, session_id: &str) -> Result<Option<Checkpoint>> {
         let map = self
             .inner
             .read()
@@ -123,7 +147,7 @@ impl Checkpointer for InMemoryCheckpointer {
         Ok(map.get(session_id).cloned())
     }
 
-    fn list_sessions(&self) -> Result<Vec<String>> {
+    async fn list_sessions(&self) -> Result<Vec<String>> {
         let map = self
             .inner
             .read()
@@ -154,8 +178,8 @@ mod tests {
         channels::Channel, schedulers::SchedulerState, state::VersionedState, types::NodeKind,
     };
 
-    #[test]
-    fn test_save_and_load_roundtrip() {
+    #[tokio::test]
+    async fn test_save_and_load_roundtrip() {
         let cp_store = InMemoryCheckpointer::new();
         let mut session = SessionState {
             state: VersionedState::new_with_user_message("hi"),
@@ -170,24 +194,23 @@ mod tests {
         );
 
         let cp = Checkpoint::from_session("sess1", &session);
-        cp_store.save(cp.clone()).unwrap();
+        cp_store.save(cp.clone()).await.unwrap();
 
-        let loaded = cp_store.load_latest("sess1").unwrap().unwrap();
+        let loaded = cp_store.load_latest("sess1").await.unwrap().unwrap();
         assert_eq!(loaded.step, 3);
         assert_eq!(loaded.frontier, vec![NodeKind::Start]);
         assert_eq!(
             loaded.versions_seen.get("Start").unwrap().get("messages"),
             Some(&1)
         );
-        // Confirm messages channel length equality (version accessor may not be public)
         assert_eq!(
             loaded.state.messages.snapshot().len(),
             session.state.messages.snapshot().len()
         );
     }
 
-    #[test]
-    fn test_list_sessions() {
+    #[tokio::test]
+    async fn test_list_sessions() {
         let cp_store = InMemoryCheckpointer::new();
         let session = SessionState {
             state: VersionedState::new_with_user_message("x"),
@@ -198,11 +221,13 @@ mod tests {
         };
         cp_store
             .save(Checkpoint::from_session("alpha", &session))
+            .await
             .unwrap();
         cp_store
             .save(Checkpoint::from_session("beta", &session))
+            .await
             .unwrap();
-        let mut ids = cp_store.list_sessions().unwrap();
+        let mut ids = cp_store.list_sessions().await.unwrap();
         ids.sort();
         assert_eq!(ids, vec!["alpha", "beta"]);
     }

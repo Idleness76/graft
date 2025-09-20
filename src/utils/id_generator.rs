@@ -78,15 +78,8 @@ impl IdGenerator {
     }
 }
 
-/// Placeholder for runtime config scaffolding.
-/// This can be expanded later for thread ID, etc.
-#[derive(Debug, Clone)]
-pub struct RuntimeConfig {
-    pub thread_id: Option<String>,
-}
-
-impl Default for RuntimeConfig {
+impl Default for IdGenerator {
     fn default() -> Self {
-        Self { thread_id: None }
+        Self::new()
     }
 }

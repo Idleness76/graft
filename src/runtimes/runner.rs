@@ -77,26 +77,80 @@ pub struct AppRunner {
     autosave: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SessionInit {
+    Fresh,
+    Resumed { checkpoint_step: u64 },
+}
+
 impl AppRunner {
     /// Create a new AppRunner wrapping the given App
-    pub fn new(app: App, checkpointer_type: CheckpointerType) -> Self {
-        Self::with_options(app, checkpointer_type, true)
+    pub async fn new(app: App, checkpointer_type: CheckpointerType) -> Self {
+        Self::with_options(app, checkpointer_type, true).await
     }
 
-    pub fn from_arc(app: Arc<App>, checkpointer_type: CheckpointerType) -> Self {
-        Self::with_options_arc(app, checkpointer_type, true)
+    pub async fn from_arc(app: Arc<App>, checkpointer_type: CheckpointerType) -> Self {
+        Self::with_options_arc(app, checkpointer_type, true).await
     }
 
-    fn create_checkpointer(checkpointer_type: CheckpointerType) -> Option<Arc<dyn Checkpointer>> {
+    async fn create_checkpointer(
+        checkpointer_type: CheckpointerType,
+        sqlite_db_name: Option<String>,
+    ) -> Option<Arc<dyn Checkpointer>> {
         match checkpointer_type {
             CheckpointerType::InMemory => Some(Arc::new(InMemoryCheckpointer::new())),
-            _ => None,
+            CheckpointerType::SQLite => {
+                let db_url = std::env::var("GRAFT_SQLITE_URL")
+                    .ok()
+                    .or_else(|| {
+                        sqlite_db_name
+                            .as_ref()
+                            .map(|name| format!("sqlite://{name}"))
+                    })
+                    .unwrap_or_else(|| {
+                        let fallback = std::env::var("SQLITE_DB_NAME")
+                            .unwrap_or_else(|_| "graft.db".to_string());
+                        format!("sqlite://{fallback}")
+                    });
+                // Ensure underlying sqlite file exists. Steps:
+                // 1. Strip "sqlite://" scheme to get filesystem path.
+                // 2. Create parent directories if needed.
+                // 3. Attempt to create the file (ignore errors if it already exists or any failure).
+                if let Some(path) = db_url.strip_prefix("sqlite://") {
+                    let path = path.trim();
+                    if !path.is_empty() {
+                        let p = std::path::Path::new(path);
+                        if let Some(parent) = p.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        if !p.exists() {
+                            // Ignore result; if it already exists or we lack permission we proceed anyway.
+                            let _ = std::fs::File::create_new(p);
+                        }
+                    }
+                }
+                match crate::runtimes::SQLiteCheckpointer::connect(&db_url).await {
+                    Ok(cp) => Some(Arc::new(cp) as Arc<dyn Checkpointer>),
+                    Err(e) => {
+                        eprintln!(
+                            "SQLiteCheckpointer initialization failed ({}): {}",
+                            db_url, e
+                        );
+                        None
+                    }
+                }
+            }
         }
     }
 
     /// Create with explicit checkpointer + autosave toggle
-    pub fn with_options(app: App, checkpointer_type: CheckpointerType, autosave: bool) -> Self {
-        let checkpointer = Self::create_checkpointer(checkpointer_type);
+    pub async fn with_options(
+        app: App,
+        checkpointer_type: CheckpointerType,
+        autosave: bool,
+    ) -> Self {
+        let sqlite_db_name = app.runtime_config().sqlite_db_name.clone();
+        let checkpointer = Self::create_checkpointer(checkpointer_type, sqlite_db_name).await;
         Self {
             app: Arc::new(app),
             sessions: FxHashMap::default(),
@@ -104,12 +158,13 @@ impl AppRunner {
             autosave,
         }
     }
-    pub fn with_options_arc(
+    pub async fn with_options_arc(
         app: Arc<App>,
         checkpointer_type: CheckpointerType,
         autosave: bool,
     ) -> Self {
-        let checkpointer = Self::create_checkpointer(checkpointer_type);
+        let sqlite_db_name = app.runtime_config().sqlite_db_name.clone();
+        let checkpointer = Self::create_checkpointer(checkpointer_type, sqlite_db_name).await;
         Self {
             app,
             sessions: FxHashMap::default(),
@@ -119,18 +174,26 @@ impl AppRunner {
     }
 
     /// Initialize a new session with the given initial state
-    pub fn create_session(
+    pub async fn create_session(
         &mut self,
         session_id: String,
         initial_state: VersionedState,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<SessionInit, Box<dyn std::error::Error + Send + Sync>> {
         // If checkpointer present and session exists, load instead of creating anew
-        if let Some(cp) = &self.checkpointer
-            && let Some(stored) = cp.load_latest(&session_id).map_err(|e| e.to_string())?
-        {
+        let restored_checkpoint = if let Some(cp) = &self.checkpointer {
+            cp.load_latest(&session_id)
+                .await
+                .map_err(|e| e.to_string())?
+        } else {
+            None
+        };
+
+        if let Some(stored) = restored_checkpoint {
             let restored = restore_session_state(&stored);
             self.sessions.insert(session_id, restored);
-            return Ok(());
+            return Ok(SessionInit::Resumed {
+                checkpoint_step: stored.step,
+            });
         }
 
         let frontier = self
@@ -156,9 +219,11 @@ impl AppRunner {
         self.sessions
             .insert(session_id.clone(), session_state.clone());
         if let Some(cp) = &self.checkpointer {
-            let _ = cp.save(Checkpoint::from_session(&session_id, &session_state));
+            let _ = cp
+                .save(Checkpoint::from_session(&session_id, &session_state))
+                .await;
         }
-        Ok(())
+        Ok(SessionInit::Fresh)
     }
 
     /// Execute one superstep for the given session
@@ -212,7 +277,9 @@ impl AppRunner {
         if self.autosave
             && let Some(cp) = &self.checkpointer
         {
-            let _ = cp.save(Checkpoint::from_session(session_id, &session_state));
+            let _ = cp
+                .save(Checkpoint::from_session(session_id, &session_state))
+                .await;
         }
 
         // Check for interrupt_after
@@ -423,7 +490,7 @@ mod tests {
     use super::*;
     use crate::graph::{EdgePredicate, GraphBuilder};
     use crate::node::{NodeA, NodeB, NodeContext, NodePartial};
-    use crate::runtimes::checkpointer::InMemoryCheckpointer;
+
     use crate::state::{StateSnapshot, VersionedState};
     use async_trait::async_trait;
 
@@ -493,16 +560,21 @@ mod tests {
             )
             .set_entry(NodeKind::Start);
         let app = gb.compile().unwrap();
-        let mut runner = AppRunner::new(app, CheckpointerType::InMemory);
+        let mut runner = AppRunner::new(app, CheckpointerType::InMemory).await;
         // State with go_yes present
         let mut state = VersionedState::new_with_user_message("hi");
         state
             .extra
             .get_mut()
             .insert("go_yes".to_string(), serde_json::json!(1));
-        runner
+        match runner
             .create_session("sess1".to_string(), state.clone())
-            .unwrap();
+            .await
+            .unwrap()
+        {
+            SessionInit::Fresh => {}
+            SessionInit::Resumed { .. } => panic!("expected fresh session"),
+        }
         let report = runner
             .run_step("sess1", StepOptions::default())
             .await
@@ -515,9 +587,14 @@ mod tests {
         }
         // State without go_yes
         let state2 = VersionedState::new_with_user_message("hi");
-        runner
+        match runner
             .create_session("sess2".to_string(), state2.clone())
-            .unwrap();
+            .await
+            .unwrap()
+        {
+            SessionInit::Fresh => {}
+            SessionInit::Resumed { .. } => panic!("expected fresh session"),
+        }
         let report2 = runner
             .run_step("sess2", StepOptions::default())
             .await
@@ -533,23 +610,30 @@ mod tests {
     #[tokio::test]
     async fn test_create_session() {
         let app = make_test_app();
-        let mut runner = AppRunner::new(app, CheckpointerType::InMemory);
+        let mut runner = AppRunner::new(app, CheckpointerType::InMemory).await;
         let initial_state = VersionedState::new_with_user_message("hello");
 
-        let result = runner.create_session("test_session".into(), initial_state);
-        assert!(result.is_ok());
+        let result = runner
+            .create_session("test_session".into(), initial_state)
+            .await
+            .unwrap();
+        assert_eq!(result, SessionInit::Fresh);
         assert!(runner.get_session("test_session").is_some());
     }
 
     #[tokio::test]
     async fn test_run_step_basic() {
         let app = make_test_app();
-        let mut runner = AppRunner::new(app, CheckpointerType::InMemory);
+        let mut runner = AppRunner::new(app, CheckpointerType::InMemory).await;
         let initial_state = VersionedState::new_with_user_message("hello");
 
-        runner
-            .create_session("test_session".into(), initial_state)
-            .unwrap();
+        assert_eq!(
+            runner
+                .create_session("test_session".into(), initial_state)
+                .await
+                .unwrap(),
+            SessionInit::Fresh
+        );
 
         let result = runner
             .run_step("test_session", StepOptions::default())
@@ -568,12 +652,16 @@ mod tests {
     #[tokio::test]
     async fn test_run_until_complete() {
         let app = make_test_app();
-        let mut runner = AppRunner::new(app, CheckpointerType::InMemory);
+        let mut runner = AppRunner::new(app, CheckpointerType::InMemory).await;
         let initial_state = VersionedState::new_with_user_message("hello");
 
-        runner
-            .create_session("test_session".into(), initial_state)
-            .unwrap();
+        assert_eq!(
+            runner
+                .create_session("test_session".into(), initial_state)
+                .await
+                .unwrap(),
+            SessionInit::Fresh
+        );
 
         let result = runner.run_until_complete("test_session").await;
         assert!(result.is_ok());
@@ -586,12 +674,16 @@ mod tests {
     #[tokio::test]
     async fn test_interrupt_before() {
         let app = make_test_app();
-        let mut runner = AppRunner::new(app, CheckpointerType::InMemory);
+        let mut runner = AppRunner::new(app, CheckpointerType::InMemory).await;
         let initial_state = VersionedState::new_with_user_message("hello");
 
-        runner
-            .create_session("test_session".into(), initial_state)
-            .unwrap();
+        assert_eq!(
+            runner
+                .create_session("test_session".into(), initial_state)
+                .await
+                .unwrap(),
+            SessionInit::Fresh
+        );
 
         // Set interrupt before the test node
         let options = StepOptions {
@@ -612,12 +704,16 @@ mod tests {
     #[tokio::test]
     async fn test_interrupt_after() {
         let app = make_test_app();
-        let mut runner = AppRunner::new(app, CheckpointerType::InMemory);
+        let mut runner = AppRunner::new(app, CheckpointerType::InMemory).await;
         let initial_state = VersionedState::new_with_user_message("hello");
 
-        runner
-            .create_session("test_session".into(), initial_state)
-            .unwrap();
+        assert_eq!(
+            runner
+                .create_session("test_session".into(), initial_state)
+                .await
+                .unwrap(),
+            SessionInit::Fresh
+        );
 
         // Set interrupt after the "test" node (which runs in the first step)
         let options = StepOptions {
@@ -636,35 +732,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_resume_from_checkpoint() {
-        //TODO this won't work with in memory checkpointer now, revisit with sqlite implementation
-        return;
-        let app = make_test_app();
-        let cp = Arc::new(InMemoryCheckpointer::new());
-        let mut runner = AppRunner::with_options(app, CheckpointerType::InMemory, true);
-        let initial_state = VersionedState::new_with_user_message("hello");
-        runner
-            .create_session("sessA".into(), initial_state)
-            .unwrap();
-        // run one step (should autosave)
-        let _ = runner
-            .run_step("sessA", StepOptions::default())
-            .await
-            .unwrap();
-        // Create a NEW runner using same checkpointer and verify it restores
-        let app2 = make_test_app();
-        let mut runner2 = AppRunner::with_options(app2, CheckpointerType::InMemory, true);
-        // calling create_session with same id should load from checkpoint rather than reset
-        runner2
-            .create_session(
-                "sessA".into(),
-                VersionedState::new_with_user_message("ignored"),
-            )
-            .unwrap();
-        let restored = runner2.get_session("sessA").unwrap();
-        assert_eq!(restored.step, 1); // resumed after first step
-        // Complete run
-        let final_state = runner2.run_until_complete("sessA").await.unwrap();
-        assert!(final_state.messages.len() >= 2); // user + test node (possibly more if node executes again)
+        // Ignored placeholder test: resume logic will be revisited for SQLite-backed persistence.
+        // Previous implementation contained an early return leading to unreachable code warnings.
     }
 }
