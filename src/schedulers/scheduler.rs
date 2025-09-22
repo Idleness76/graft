@@ -4,6 +4,7 @@ use crate::types::NodeKind;
 use futures::stream::{self, StreamExt};
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
+use tracing::instrument;
 
 /// Result of running a superstep over the frontier.
 #[derive(Debug, Clone)]
@@ -97,6 +98,7 @@ impl Scheduler {
     }
 
     /// Run one superstep over a frontier with bounded concurrency. End nodes are skipped.
+    #[instrument(skip(self, state, nodes, frontier, snap))]
     pub async fn superstep(
         &self,
         state: &mut SchedulerState,
