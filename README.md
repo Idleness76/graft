@@ -1,144 +1,85 @@
 # Graft
 
-A Rust-based framework for building graph-driven, concurrent agent workflows—an alternative to Python’s LangGraph, with a focus on explicit state, deterministic execution, and extensibility.
+A Rust framework for graph-driven, concurrent agent workflows with explicit, versioned state and deterministic barrier merges. Think “LangGraph-style graphs” but strongly typed, instrumented, and designed for reliability.
 
-## Overview
+## Highlights
 
-Graft provides a minimal, extensible runtime for orchestrating nodes (agents) over a directed graph, with versioned state channels and deterministic barrier merges. It’s designed for LLM and tool orchestration, but general enough for broader dataflow and actor-style applications.
+- Versioned, channelized state: `messages`, `extra`, and an in-memory `errors` channel
+- Deterministic barrier merges via a pluggable reducer registry
+- Bounded-concurrency scheduler with version gating (superstep barrier model)
+- Strong, typed error propagation across nodes, scheduler, and runner (thiserror + miette)
+- Rich tracing spans (`tracing`) and pretty diagnostics (`miette`)
+- Optional checkpointing via SQLite (or in-memory)
 
-Dream final state architectural flow chart
-```mermaid
+## Repo layout (key modules)
 
-flowchart TB
+- `src/app.rs` – Orchestrates barriers and reducers; `App::invoke` runs to completion
+- `src/runtimes/` – Sessions, runner, checkpointing (in-memory and SQLite)
+- `src/schedulers/` – Frontier scheduler (`superstep`) with version gating
+- `src/reducers/` – Reducer registry and reducers for channels
+- `src/channels/` – Channels (`MessagesChannel`, `ExtrasChannel`, `ErrorsChannel`) and error models (`ErrorEvent`)
+- `src/node.rs` – `Node` trait with typed `NodeError` and `NodePartial` outputs
+- `src/run_demo{1,2,3}.rs` – Demos showing increasing sophistication
+- `src/main.rs` – CLI to select which demo to run
 
-subgraph Client
-  user[Client App or UI]
-end
+## Running the demos (CLI)
 
-subgraph Build
-  gb[GraphBuilder]
-end
+Select a demo at runtime (default is `demo3`):
 
-subgraph Graph
-  cg[CompiledGraph]
-end
-
-subgraph Runtime
-  app[App]
-  sched[Scheduler]
-  router[Router Edges and Commands]
-  barrier[Barrier Applier]
-end
-
-subgraph Nodes
-  usernode[User Nodes]
-  llmnode[LLM Node]
-  toolnode[Tool Node]
-end
-
-subgraph State
-  vstate[Versioned State]
-  snap[State Snapshot]
-end
-
-subgraph Reducers
-  redreg[Reducer Registry]
-end
-
-subgraph Checkpoint
-  cpif[Checkpointer]
-end
-
-subgraph Rig
-  rigad[Rig Adapter]
-  llmprov[LLM Provider]
-end
-
-subgraph Tools
-  toolreg[Tool Registry]
-  exttools[External Tools]
-end
-
-subgraph Stream
-  stream[Stream Controller]
-end
-
-subgraph Viz
-  viz[Visualizer]
-end
-
-
-user --> gb
-gb --> cg
-
-user --> app
-cg --> app
-
-app --> sched
-sched --> snap
-vstate --> snap
-
-sched --> usernode
-sched --> llmnode
-sched --> toolnode
-
-usernode --> barrier
-llmnode --> barrier
-toolnode --> barrier
-redreg --> barrier
-barrier --> vstate
-
-snap --> router
-app --> router
-router --> sched
-
-llmnode --> rigad
-rigad --> llmprov
-llmprov --> rigad
-rigad --> llmnode
-
-toolnode --> toolreg
-toolnode --> exttools
-exttools --> toolnode
-
-barrier --> cpif
-
-app --> stream
-stream --> user
-
-cg --> viz
-
+```bash
+cargo run -- demo1
+cargo run -- demo2
+cargo run -- demo3
 ```
 
-## Features
+What the demos showcase:
 
-- **Versioned, channelized state** (messages, outputs, meta)
-- **Pluggable reducers** for deterministic state merges
-- **Parallel node execution** with superstep/barrier model
-- **Extensible graph topology** (nodes, edges)
-- **Async execution** via Tokio
+- `demo1`: Basic graph execution via `App::invoke`, manual barrier examples, version bumps
+- `demo2`: Direct scheduler usage (`superstep`), ran/skipped nodes, barrier application each step
+- `demo3`: LLM-style nodes using Rig/Ollama, conditional edges, SQLite checkpointing, and error pretty-printing
 
-## Quick Start
+Notes for `demo3`:
 
-...coming
+- Provider: Expects Ollama running at `http://localhost:11434` and the referenced models (e.g., `gemma3`, `gemma3:270m`). If unavailable, the demo will fail gracefully and emit a structured error; you’ll see a pretty-printed error ladder.
+- Checkpointing: Uses SQLite by default. The DB URL is resolved in this order:
+  - `GRAFT_SQLITE_URL` (e.g., `sqlite://graft.db`)
+  - `sqlite_db_name` set in code
+  - `SQLITE_DB_NAME` env var (filename only)
+  - Fallback: `sqlite://graft.db`
 
-## Documentation
+## Build, test, and logs
 
-- See [`doc/iteration1_demo1.md`](doc/iteration1_demo1.md) for a detailed architecture overview, roadmap, and design principles.
-- The documentation folder contains design notes, glossary, roadmap, and open questions to guide contributors and future development.
-- Example code and usage patterns are described in the documentation, but are not runnable as-is.
+Build and test:
 
-## Roadmap
+```bash
+cargo build
+cargo test --all -- --nocapture
+```
 
-- Dynamic channel registry
-- Structured error handling
-- Logging & tracing
-- Graph validation
-- Real-world node examples (LLM, tools, etc.)
+Tracing and logs:
+
+- The default filter is `info,graft=debug`. Override with `RUST_LOG`:
+
+```bash
+RUST_LOG=debug cargo run -- demo2
+```
+
+## Error handling and diagnostics
+
+- Nodes return `Result<NodePartial, NodeError>`
+- Scheduler returns `Result<StepRunResult, SchedulerError>`; node failures include context (`kind`, `step`)
+- Runner surfaces `RunnerError` and, on failure, emits an `ErrorEvent` into `extra["errors"]` and the in-memory `errors` channel
+- Demos print a human-friendly error ladder via `errors::pretty_print` at the end
+- Binaries return `miette::Result`, so typed errors render nicely without extra glue code
+
+## Persistence
+
+- In-memory and SQLite checkpointing are available; demos 1–2 run in-memory; demo 3 uses SQLite by default.
+- The runner will attempt to create the SQLite file if it doesn’t exist.
 
 ## Contributing
 
-Contributions and feedback are welcome! Please review the open questions in the demo documentation and help shape the direction of the project.
+Contributions are welcome! See `doc/` for design notes and plans. PRs with tests, tracing, or improved diagnostics are especially appreciated.
 
 ## License
 
