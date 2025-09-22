@@ -93,8 +93,7 @@ pub async fn run_demo2() -> Result<()> {
                 snapshot.clone(),
                 step,
             )
-            .await
-            .map_err(|e| miette::miette!("{e}"))?;
+            .await?;
         // Update counters and print high-level result
         for id in &step_result.ran_nodes {
             *ran_counts.entry(id.clone()).or_insert(0) += 1;

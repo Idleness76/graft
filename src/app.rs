@@ -6,6 +6,7 @@ use crate::channels::Channel;
 use crate::message::*;
 use crate::node::*;
 use crate::reducers::ReducerRegistry;
+use crate::runtimes::runner::RunnerError;
 use crate::runtimes::{CheckpointerType, RuntimeConfig, SessionInit};
 use crate::state::*;
 use crate::types::*;
@@ -59,7 +60,7 @@ impl App {
     pub async fn invoke(
         &self,
         initial_state: VersionedState,
-    ) -> Result<VersionedState, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<VersionedState, RunnerError> {
         use crate::runtimes::AppRunner;
 
         // Determine checkpointer type (default to InMemory if none supplied)
@@ -80,8 +81,7 @@ impl App {
 
         let init_state = runner
             .create_session(session_id.clone(), initial_state)
-            .await
-            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
+            .await?;
 
         if let SessionInit::Resumed { checkpoint_step } = init_state {
             println!(
@@ -89,10 +89,7 @@ impl App {
                 session_id, checkpoint_step
             );
         }
-        runner
-            .run_until_complete(&session_id)
-            .await
-            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })
+        runner.run_until_complete(&session_id).await
     }
 
     /// Merge NodePartial updates, invoke reducers, bump versions if content changed.

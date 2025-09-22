@@ -185,7 +185,7 @@ pub async fn run_demo3() -> Result<()> {
         .compile()
         .map_err(|e| miette::miette!("{e:?}"))?;
 
-    let final_state = app.invoke(init).await.map_err(|e| miette::miette!("{e}"))?;
+    let final_state = app.invoke(init).await?;
     // Optionally log something from the final state to avoid unused warnings
     println!("final messages: {}", final_state.messages.snapshot().len());
 
