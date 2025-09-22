@@ -29,11 +29,20 @@ use crate::{
 };
 
 /// Channel that stores a vector collection (e.g., messages) with version metadata.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PersistedVecChannel<T> {
     pub version: u32,
     #[serde(default)]
     pub items: Vec<T>,
+}
+
+impl<T> Default for PersistedVecChannel<T> {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            items: Vec::new(),
+        }
+    }
 }
 
 /// Channel that stores a map collection (e.g., extra) with version metadata.
@@ -42,6 +51,15 @@ pub struct PersistedMapChannel<V> {
     pub version: u32,
     #[serde(default)]
     pub map: FxHashMap<String, V>,
+}
+
+impl<V> Default for PersistedMapChannel<V> {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            map: FxHashMap::default(),
+        }
+    }
 }
 
 /// Complete persisted shape of the in‑memory VersionedState.
@@ -124,6 +142,7 @@ impl TryFrom<PersistedState> for VersionedState {
         Ok(VersionedState {
             messages: MessagesChannel::new(p.messages.items, p.messages.version),
             extra: ExtrasChannel::new(p.extra.map, p.extra.version),
+            errors: crate::channels::ErrorsChannel::default(),
         })
     }
 }

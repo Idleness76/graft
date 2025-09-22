@@ -3,10 +3,12 @@ use crate::types::ChannelType;
 mod extras;
 mod messages;
 pub mod errors;
+mod errors_channel;
 
 pub use extras::ExtrasChannel;
 pub use messages::MessagesChannel;
 pub use errors::*;
+pub use errors_channel::ErrorsChannel;
 
 pub trait Channel<T>: Sync + Send {
     fn get_channel_type(&self) -> ChannelType;

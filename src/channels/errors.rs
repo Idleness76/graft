@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 // Avoid depending on serde for NodeKind by using encoded string form for kind.
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ErrorEvent {
     pub when: DateTime<Utc>,
     pub scope: ErrorScope,
@@ -14,7 +14,7 @@ pub struct ErrorEvent {
     pub context: serde_json::Value,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "scope", rename_all = "snake_case")]
 pub enum ErrorScope {
     Node { kind: String, step: u64 },
@@ -23,7 +23,7 @@ pub enum ErrorScope {
     App,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LadderError {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
