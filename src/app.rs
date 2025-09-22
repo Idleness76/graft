@@ -123,7 +123,29 @@ impl App {
             {
                 println!("  {:?} -> extra: +{} keys", nid, ex.len());
                 for (k, v) in ex {
-                    extra_all.insert(k.clone(), v.clone());
+                    if k == "errors" {
+                        // Merge arrays for error events
+                        use serde_json::Value::Array;
+                        match (extra_all.get_mut(k), v) {
+                            (Some(Array(dst)), Array(src)) => {
+                                dst.extend(src.clone());
+                            }
+                            (None, Array(_)) => {
+                                extra_all.insert(k.clone(), v.clone());
+                            }
+                            (Some(_), Array(_)) => {
+                                // Existing non-array; replace to keep errors consistent
+                                extra_all.insert(k.clone(), v.clone());
+                            }
+                            _ => {
+                                // Non-array error key; just overwrite for now
+                                extra_all.insert(k.clone(), v.clone());
+                            }
+                        }
+                    } else {
+                        // default shallow merge behavior
+                        extra_all.insert(k.clone(), v.clone());
+                    }
                 }
             }
         }
