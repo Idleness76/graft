@@ -7,13 +7,14 @@ use super::message::Message;
 use super::node::{NodeA, NodeB, NodePartial};
 use super::state::VersionedState;
 use super::types::NodeKind;
+use miette::Result;
 
 /// Demonstration run showcasing:
 /// 1. Building and executing a small multi-step graph
 /// 2. Inspecting final state (messages + extra)
 /// 3. Manual barrier applications (mixed, no-op, saturating version)
 /// 4. GraphBuilder error cases
-pub async fn run_demo1() -> anyhow::Result<()> {
+pub async fn run_demo1() -> Result<()> {
     println!("== Demo start ==");
 
     // 1. Initial state with a user message + seeded extra data
@@ -37,13 +38,13 @@ pub async fn run_demo1() -> anyhow::Result<()> {
         .add_edge(NodeKind::Other("B".into()), NodeKind::End)
         .set_entry(NodeKind::Start)
         .compile()
-        .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
+        .map_err(|e| miette::miette!("{e:?}"))?;
 
     // 3. Invoke full app run
     let final_state = app
         .invoke(init)
         .await
-        .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
+        .map_err(|e| miette::miette!("{e:?}"))?;
 
     // 4. Snapshot & mutation demonstration (snapshots are deep copies)
     let snap_before = final_state.snapshot();
@@ -108,7 +109,7 @@ pub async fn run_demo1() -> anyhow::Result<()> {
     let updated = app
         .apply_barrier(&mut manual_state, &run_ids, partials_mixed)
         .await
-        .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
+        .map_err(|e| miette::miette!("{e:?}"))?;
     println!("Barrier (mixed) updated channels: {:?}", updated);
     {
         let snap = manual_state.snapshot();
@@ -137,7 +138,7 @@ pub async fn run_demo1() -> anyhow::Result<()> {
     let updated2 = app
         .apply_barrier(&mut manual_state, &[], partials_noop)
         .await
-        .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
+        .map_err(|e| miette::miette!("{e:?}"))?;
     println!("Barrier (no-op) updated channels: {:?}", updated2);
 
     // c) Saturating version test for messages.version
@@ -154,7 +155,7 @@ pub async fn run_demo1() -> anyhow::Result<()> {
     let _ = app
         .apply_barrier(&mut manual_state, &[], vec![saturated])
         .await
-        .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
+        .map_err(|e| miette::miette!("{e:?}"))?;
     {
         println!(
             "Saturating test messages.version={} (should remain u32::MAX)",

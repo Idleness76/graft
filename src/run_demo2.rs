@@ -8,13 +8,14 @@ use super::node::{NodeA, NodeB, NodePartial};
 use super::schedulers::{Scheduler, SchedulerState, StepRunResult};
 use super::state::VersionedState;
 use super::types::NodeKind;
+use miette::Result;
 
 /// Demonstration run showcasing:
 /// 1. Building and executing a small multi-step graph using Scheduler
 /// 2. Inspecting StepRunResult (ran/skipped/outputs)
 /// 3. Manual concurrency control and version gating
 /// 4. Barrier application using StepRunResult outputs
-pub async fn run_demo2() -> anyhow::Result<()> {
+pub async fn run_demo2() -> Result<()> {
     println!("\n==============================");
     println!("== Demo2: Scheduler Runtime ==");
     println!("==============================\n");
@@ -41,8 +42,8 @@ pub async fn run_demo2() -> anyhow::Result<()> {
         .add_edge(NodeKind::Other("A".into()), NodeKind::Other("B".into()))
         .add_edge(NodeKind::Other("B".into()), NodeKind::End)
         .set_entry(NodeKind::Start)
-        .compile()
-        .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
+    .compile()
+    .map_err(|e| miette::miette!("{e:?}"))?;
 
     // 3. Prepare scheduler with explicit concurrency limit
     let scheduler = Scheduler::new(2); // Try changing to 1 for serial demo
@@ -155,7 +156,7 @@ pub async fn run_demo2() -> anyhow::Result<()> {
         let updated_channels = app
             .apply_barrier(&mut state, &run_ids, node_partials)
             .await
-            .map_err(|e| anyhow::Error::msg(e.to_string()))?;
+            .map_err(|e| miette::miette!("{e}"))?;
         println!("Barrier updated channels: {:?}", updated_channels);
         // Show versions_seen for nodes that ran (pre-barrier snapshot versions recorded by scheduler)
         if !run_ids.is_empty() {
