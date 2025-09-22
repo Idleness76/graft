@@ -311,17 +311,42 @@ impl AppRunner {
             Ok(rep) => rep,
             Err(e) => {
                 // Build error event
-                let event = ErrorEvent {
-                    when: chrono::Utc::now(),
-                    scope: ErrorScope::Runner {
-                        session: session_id.to_string(),
-                        step: session_state.step,
+                let event = match &e {
+                    RunnerError::Scheduler(s) => match s {
+                        crate::schedulers::SchedulerError::NodeRun { kind, step, source } => {
+                            ErrorEvent {
+                                when: chrono::Utc::now(),
+                                scope: ErrorScope::Node {
+                                    kind: format!("{}", kind.encode()),
+                                    step: *step,
+                                },
+                                error: LadderError::msg(format!("{}", source)),
+                                tags: vec!["node".into()],
+                                context: serde_json::json!({}),
+                            }
+                        }
+                        crate::schedulers::SchedulerError::Join(_) => ErrorEvent {
+                            when: chrono::Utc::now(),
+                            scope: ErrorScope::Scheduler {
+                                step: session_state.step,
+                            },
+                            error: LadderError::msg(format!("{}", e)),
+                            tags: vec!["scheduler".into()],
+                            context: serde_json::json!({}),
+                        },
                     },
-                    error: LadderError::msg(format!("{}", e)),
-                    tags: vec!["runner".into()],
-                    context: serde_json::json!({
-                        "frontier": session_state.frontier.iter().map(|k| k.encode()).collect::<Vec<_>>()
-                    }),
+                    _ => ErrorEvent {
+                        when: chrono::Utc::now(),
+                        scope: ErrorScope::Runner {
+                            session: session_id.to_string(),
+                            step: session_state.step,
+                        },
+                        error: LadderError::msg(format!("{}", e)),
+                        tags: vec!["runner".into()],
+                        context: serde_json::json!({
+                            "frontier": session_state.frontier.iter().map(|k| k.encode()).collect::<Vec<_>>()
+                        }),
+                    },
                 };
                 // Inject via barrier mechanics by applying a synthetic NodePartial with extra["errors"]
                 let mut update_state = session_state.state.clone();

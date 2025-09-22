@@ -4,6 +4,7 @@ use super::node::{Node, NodeContext, NodeError, NodePartial};
 use super::state::{StateSnapshot, VersionedState};
 use super::types::NodeKind;
 use crate::channels::Channel;
+use crate::channels::errors::pretty_print;
 use crate::message::*;
 use crate::runtimes::{CheckpointerType, RuntimeConfig};
 use async_trait::async_trait;
@@ -189,6 +190,11 @@ pub async fn run_demo3() -> Result<()> {
     println!("final messages: {}", final_state.messages.snapshot().len());
 
     println!("== Demo3 complete ==");
+    // Print any error events accumulated
+    let errs = final_state.errors.snapshot();
+    if !errs.is_empty() {
+        println!("\nErrors captured:\n{}", pretty_print(&errs));
+    }
     // Recap totals
 
     Ok(())

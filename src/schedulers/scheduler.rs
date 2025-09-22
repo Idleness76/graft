@@ -35,9 +35,14 @@ pub struct Scheduler {
 
 #[derive(Debug, Error, Diagnostic)]
 pub enum SchedulerError {
-    #[error(transparent)]
+    #[error("node run error at step {step} for {kind:?}: {source}")]
     #[diagnostic(code(graft::scheduler::node))]
-    Node(#[from] NodeError),
+    NodeRun {
+        kind: NodeKind,
+        step: u64,
+        #[source]
+        source: NodeError,
+    },
 
     #[error("task join error: {0}")]
     #[diagnostic(code(graft::scheduler::join))]
@@ -165,8 +170,16 @@ impl Scheduler {
         let mut outputs: Vec<(NodeKind, NodePartial)> = Vec::new();
         let mut stream = stream::iter(tasks).buffer_unordered(self.concurrency_limit);
         while let Some((kind, res)) = stream.next().await {
-            let part = res?; // NodeError maps via From
-            outputs.push((kind, part));
+            match res {
+                Ok(part) => outputs.push((kind, part)),
+                Err(e) => {
+                    return Err(SchedulerError::NodeRun {
+                        kind,
+                        step,
+                        source: e,
+                    });
+                }
+            }
         }
 
         // Record versions seen for nodes that ran.

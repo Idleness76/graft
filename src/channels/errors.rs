@@ -45,3 +45,22 @@ impl LadderError {
         self
     }
 }
+
+pub fn pretty_print(events: &[ErrorEvent]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    for (i, e) in events.iter().enumerate() {
+        let _ = writeln!(out, "[{}] {} | {:?}", i, e.when, e.scope);
+        let _ = writeln!(out, "  error: {}", e.error.message);
+        if let Some(cause) = &e.error.cause {
+            let _ = writeln!(out, "  cause: {}", cause.message);
+        }
+        if !e.tags.is_empty() {
+            let _ = writeln!(out, "  tags: {:?}", e.tags);
+        }
+        if !e.context.is_null() {
+            let _ = writeln!(out, "  context: {}", e.context);
+        }
+    }
+    out
+}

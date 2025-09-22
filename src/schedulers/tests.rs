@@ -79,10 +79,10 @@ async fn test_superstep_propagates_node_error() {
 
     let res = sched.superstep(&mut state, &nodes, frontier, snap, 1).await;
     match res {
-        Err(super::scheduler::SchedulerError::Node(NodeError::MissingInput { what })) => {
+        Err(super::scheduler::SchedulerError::NodeRun { source: NodeError::MissingInput { what }, .. }) => {
             assert_eq!(what, "test_key");
         }
-        other => panic!("expected SchedulerError::Node(MissingInput), got: {:?}", other),
+        other => panic!("expected SchedulerError::NodeRun(MissingInput), got: {:?}", other),
     }
 }
 

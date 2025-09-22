@@ -9,6 +9,7 @@ use super::schedulers::{Scheduler, SchedulerState, StepRunResult};
 use super::state::VersionedState;
 use super::types::NodeKind;
 use miette::Result;
+use crate::channels::errors::pretty_print;
 
 /// Demonstration run showcasing:
 /// 1. Building and executing a small multi-step graph using Scheduler
@@ -209,6 +210,11 @@ pub async fn run_demo2() -> Result<()> {
         println!("  {k}: {v}");
     }
     println!("== Demo2 complete ==");
+    // Print any error events accumulated
+    let errs = final_state.errors.snapshot();
+    if !errs.is_empty() {
+        println!("\nErrors captured:\n{}", pretty_print(&errs));
+    }
     // Recap totals
     println!("\nRecap: node run/skip counts");
     let mut keys: std::collections::HashSet<NodeKind> = std::collections::HashSet::new();
