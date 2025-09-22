@@ -3,6 +3,8 @@ use crate::state::*;
 use async_trait::async_trait;
 use rustc_hash::FxHashMap;
 use serde_json::json;
+use miette::Diagnostic;
+use thiserror::Error;
 
 #[derive(Clone, Debug)]
 pub struct NodeContext {
@@ -20,7 +22,22 @@ pub struct NodePartial {
 
 #[async_trait]
 pub trait Node: Send + Sync {
-    async fn run(&self, snapshot: StateSnapshot, ctx: NodeContext) -> NodePartial;
+    async fn run(&self, snapshot: StateSnapshot, ctx: NodeContext) -> Result<NodePartial, NodeError>;
+}
+
+#[derive(Debug, Error, Diagnostic)]
+pub enum NodeError {
+    #[error("missing expected input: {what}")]
+    #[diagnostic(code(graft::node::missing_input), help("Check that the previous node produced the required data."))]
+    MissingInput { what: &'static str },
+
+    #[error("provider error: {0}")]
+    #[diagnostic(code(graft::node::provider))]
+    Provider(String),
+
+    #[error(transparent)]
+    #[diagnostic(code(graft::node::serde_json))]
+    Serde(#[from] serde_json::Error),
 }
 
 /****************
@@ -31,7 +48,7 @@ pub struct NodeA;
 
 #[async_trait]
 impl Node for NodeA {
-    async fn run(&self, snapshot: StateSnapshot, ctx: NodeContext) -> NodePartial {
+    async fn run(&self, snapshot: StateSnapshot, ctx: NodeContext) -> Result<NodePartial, NodeError> {
         let seen_msgs = snapshot.messages.len();
         let content = format!("A saw {} msgs at step {}", seen_msgs, ctx.step);
 
@@ -40,13 +57,13 @@ impl Node for NodeA {
         extra.insert("hint".into(), json!("alpha"));
         extra.insert("step".into(), json!(ctx.step));
 
-        NodePartial {
+        Ok(NodePartial {
             messages: Some(vec![Message {
                 role: "assistant".into(),
                 content,
             }]),
             extra: Some(extra),
-        }
+        })
     }
 }
 
@@ -54,7 +71,7 @@ pub struct NodeB;
 
 #[async_trait]
 impl Node for NodeB {
-    async fn run(&self, snapshot: StateSnapshot, ctx: NodeContext) -> NodePartial {
+    async fn run(&self, snapshot: StateSnapshot, ctx: NodeContext) -> Result<NodePartial, NodeError> {
         let content = format!(
             "B ran at step {} (prev msgs={})",
             ctx.step,
@@ -64,13 +81,13 @@ impl Node for NodeB {
         let mut extra = FxHashMap::default();
         extra.insert("tag".into(), json!("beta"));
         extra.insert("last_step".into(), json!(ctx.step));
-        NodePartial {
+        Ok(NodePartial {
             messages: Some(vec![Message {
                 role: "assistant".into(),
                 content,
             }]),
             extra: Some(extra),
-        }
+        })
     }
 }
 
@@ -95,7 +112,7 @@ mod tests {
             extra_version: 1,
         };
         let ctx = make_ctx(5);
-        let result = node.run(snap.clone(), ctx).await;
+    let result = node.run(snap.clone(), ctx).await.unwrap();
         assert!(result.messages.is_some());
         let msg = &result.messages.as_ref().unwrap()[0];
         assert_eq!(msg.role, "assistant");
@@ -119,7 +136,7 @@ mod tests {
             extra_version: 1,
         };
         let ctx = make_ctx(7);
-        let result = node.run(snap.clone(), ctx).await;
+    let result = node.run(snap.clone(), ctx).await.unwrap();
         let msg = &result.messages.as_ref().unwrap()[0];
         assert_eq!(msg.content, "A saw 1 msgs at step 7");
     }
@@ -134,7 +151,7 @@ mod tests {
             extra_version: 1,
         };
         let ctx = make_ctx(3);
-        let result = node.run(snap.clone(), ctx).await;
+    let result = node.run(snap.clone(), ctx).await.unwrap();
         assert!(result.messages.is_some());
         let msg = &result.messages.as_ref().unwrap()[0];
         assert_eq!(msg.content, "B ran at step 3 (prev msgs=0)");
@@ -155,7 +172,7 @@ mod tests {
             extra_version: 1,
         };
         let ctx = make_ctx(8);
-        let result = node.run(snap.clone(), ctx).await;
+    let result = node.run(snap.clone(), ctx).await.unwrap();
         let msg = &result.messages.as_ref().unwrap()[0];
         assert_eq!(msg.content, "B ran at step 8 (prev msgs=1)");
     }

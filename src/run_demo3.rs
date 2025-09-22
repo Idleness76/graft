@@ -1,5 +1,5 @@
 use super::graph::GraphBuilder;
-use super::node::{Node, NodeContext, NodePartial};
+use super::node::{Node, NodeContext, NodeError, NodePartial};
 
 use super::state::{StateSnapshot, VersionedState};
 use super::types::NodeKind;
@@ -21,10 +21,16 @@ struct NodeA;
 #[async_trait]
 impl Node for NodeA {
     #[instrument(skip(self, snapshot, _ctx))]
-    async fn run(&self, snapshot: StateSnapshot, _ctx: NodeContext) -> NodePartial {
+    async fn run(
+        &self,
+        snapshot: StateSnapshot,
+        _ctx: NodeContext,
+    ) -> Result<NodePartial, NodeError> {
         //this will be the first node to run, first message should be the user prompt
         // can validate ctx.step if necessary
-        let user_prompt = snapshot.messages.last().unwrap();
+        let user_prompt = snapshot.messages.last().ok_or(NodeError::MissingInput {
+            what: "user_prompt",
+        })?;
 
         println!("initial prompt is: {}", user_prompt.content);
         let client = ollama::Client::new();
@@ -39,22 +45,23 @@ impl Node for NodeA {
         let response = completion_model
             .completion(completion_request)
             .await
-            .unwrap();
+            .map_err(|e| NodeError::Provider(e.to_string()))?;
         println!("model response is: {:?}", response);
 
-        NodePartial {
-            messages: Some(
-                response
-                    .choice
-                    .into_iter()
-                    .map(|assistant_content| Message {
-                        content: serde_json::to_string(&assistant_content).unwrap(),
-                        role: "assistant".into(),
-                    })
-                    .collect(),
-            ),
+        let messages: Result<Vec<Message>, serde_json::Error> = response
+            .choice
+            .into_iter()
+            .map(|assistant_content| {
+                Ok(Message {
+                    content: serde_json::to_string(&assistant_content)?,
+                    role: "assistant".into(),
+                })
+            })
+            .collect();
+        Ok(NodePartial {
+            messages: Some(messages.map_err(NodeError::from)?),
             extra: None,
-        }
+        })
     }
 }
 
@@ -63,7 +70,11 @@ struct NodeB;
 #[async_trait]
 impl Node for NodeB {
     #[instrument(skip(self, snapshot, _ctx))]
-    async fn run(&self, snapshot: StateSnapshot, _ctx: NodeContext) -> NodePartial {
+    async fn run(
+        &self,
+        snapshot: StateSnapshot,
+        _ctx: NodeContext,
+    ) -> Result<NodePartial, NodeError> {
         let cat_iterations = serde_json::from_value::<i32>(
             snapshot
                 .extra
@@ -71,7 +82,7 @@ impl Node for NodeB {
                 .unwrap_or(&json!(0))
                 .clone(),
         )
-        .unwrap();
+        .map_err(NodeError::from)?;
 
         let joke_response = snapshot.messages.last().unwrap();
         let client = ollama::Client::new();
@@ -94,25 +105,26 @@ impl Node for NodeB {
         let response = completion_model
             .completion(completion_request)
             .await
-            .unwrap();
+            .map_err(|e| NodeError::Provider(e.to_string()))?;
 
         println!("model response is: {:?}", response);
 
         let mut extra: FxHashMap<String, Value> = FxHashMap::default();
         extra.insert("cat iterations".into(), json!(cat_iterations + 1));
-        NodePartial {
-            messages: Some(
-                response
-                    .choice
-                    .into_iter()
-                    .map(|assistant_content| Message {
-                        content: serde_json::to_string(&assistant_content).unwrap(),
-                        role: "assistant".into(),
-                    })
-                    .collect(),
-            ),
+        let messages: Result<Vec<Message>, serde_json::Error> = response
+            .choice
+            .into_iter()
+            .map(|assistant_content| {
+                Ok(Message {
+                    content: serde_json::to_string(&assistant_content)?,
+                    role: "assistant".into(),
+                })
+            })
+            .collect();
+        Ok(NodePartial {
+            messages: Some(messages.map_err(NodeError::from)?),
             extra: Some(extra),
-        }
+        })
     }
 }
 
