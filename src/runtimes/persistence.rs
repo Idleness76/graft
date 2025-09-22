@@ -70,23 +70,33 @@ pub struct PersistedCheckpoint {
     pub created_at: String,
 }
 
-/// Bidirectional conversion errors.
-#[derive(Debug)]
+use miette::Diagnostic;
+use thiserror::Error;
+
+/// Bidirectional conversion and serialization errors for persistence models.
+#[derive(Debug, Error, Diagnostic)]
 pub enum PersistenceError {
+    #[error("missing field: {0}")]
+    #[diagnostic(
+        code(graft::persistence::missing_field),
+        help("Populate the field in the persisted JSON before conversion.")
+    )]
     MissingField(&'static str),
+
+    #[error("JSON serialization/deserialization failed: {source}")]
+    #[diagnostic(
+        code(graft::persistence::serde),
+        help("Ensure the JSON structure matches Persisted* types.")
+    )]
+    Serde {
+        #[source]
+        source: serde_json::Error,
+    },
+
+    #[error("persistence error: {0}")]
+    #[diagnostic(code(graft::persistence::other))]
     Other(String),
 }
-
-impl std::fmt::Display for PersistenceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PersistenceError::MissingField(fld) => write!(f, "missing field: {fld}"),
-            PersistenceError::Other(s) => write!(f, "persistence error: {s}"),
-        }
-    }
-}
-
-impl std::error::Error for PersistenceError {}
 
 pub type Result<T> = std::result::Result<T, PersistenceError>;
 
@@ -172,20 +182,20 @@ impl TryFrom<PersistedCheckpoint> for Checkpoint {
 /* ---------- Convenience JSON helpers (optional) ---------- */
 
 impl PersistedState {
-    pub fn to_json_string(&self) -> std::result::Result<String, PersistenceError> {
-        serde_json::to_string(self).map_err(|e| PersistenceError::Other(e.to_string()))
+    pub fn to_json_string(&self) -> Result<String> {
+        serde_json::to_string(self).map_err(|e| PersistenceError::Serde { source: e })
     }
     pub fn from_json_str(s: &str) -> Result<Self> {
-        serde_json::from_str(s).map_err(|e| PersistenceError::Other(e.to_string()))
+        serde_json::from_str(s).map_err(|e| PersistenceError::Serde { source: e })
     }
 }
 
 impl PersistedCheckpoint {
-    pub fn to_json_string(&self) -> std::result::Result<String, PersistenceError> {
-        serde_json::to_string(self).map_err(|e| PersistenceError::Other(e.to_string()))
+    pub fn to_json_string(&self) -> Result<String> {
+        serde_json::to_string(self).map_err(|e| PersistenceError::Serde { source: e })
     }
     pub fn from_json_str(s: &str) -> Result<Self> {
-        serde_json::from_str(s).map_err(|e| PersistenceError::Other(e.to_string()))
+        serde_json::from_str(s).map_err(|e| PersistenceError::Serde { source: e })
     }
 }
 

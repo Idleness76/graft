@@ -65,8 +65,11 @@ Design goals:
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
+use miette::Diagnostic;
 use serde_json::Value;
 use sqlx::{Row, SqlitePool, sqlite::SqliteRow};
+use thiserror::Error;
+use tracing::instrument;
 
 use crate::{
     runtimes::checkpointer::{Checkpoint, Checkpointer, CheckpointerError, Result},
@@ -74,6 +77,52 @@ use crate::{
     state::VersionedState,
     types::NodeKind,
 };
+
+#[derive(Debug, Error, Diagnostic)]
+pub enum SqliteCheckpointerError {
+    #[error("SQLx error: {0}")]
+    #[diagnostic(
+        code(graft::sqlite::sqlx),
+        help("Ensure the SQLite database URL is valid and accessible.")
+    )]
+    Sqlx(#[from] sqlx::Error),
+
+    #[error("JSON serialization error: {0}")]
+    #[diagnostic(
+        code(graft::sqlite::serde),
+        help("Check serialized shapes for state/frontier/versions_seen.")
+    )]
+    Serde(#[from] serde_json::Error),
+
+    #[error("Missing persisted field: {0}")]
+    #[diagnostic(
+        code(graft::sqlite::missing),
+        help("Backfill or re-run migrations to populate the missing field.")
+    )]
+    Missing(&'static str),
+
+    #[error("Backend error: {0}")]
+    #[diagnostic(code(graft::sqlite::backend))]
+    Backend(String),
+
+    #[error("Other error: {0}")]
+    #[diagnostic(code(graft::sqlite::other))]
+    Other(String),
+}
+
+impl From<SqliteCheckpointerError> for CheckpointerError {
+    fn from(e: SqliteCheckpointerError) -> Self {
+        match e {
+            SqliteCheckpointerError::Sqlx(err) => CheckpointerError::Backend(err.to_string()),
+            SqliteCheckpointerError::Serde(err) => CheckpointerError::Other(err.to_string()),
+            SqliteCheckpointerError::Missing(what) => {
+                CheckpointerError::Other(format!("missing persisted field: {what}"))
+            }
+            SqliteCheckpointerError::Backend(msg) => CheckpointerError::Backend(msg),
+            SqliteCheckpointerError::Other(msg) => CheckpointerError::Other(msg),
+        }
+    }
+}
 
 /// SQLite-backed implementation of `Checkpointer`.
 pub struct SQLiteCheckpointer {
@@ -89,6 +138,7 @@ impl std::fmt::Debug for SQLiteCheckpointer {
 impl SQLiteCheckpointer {
     /// Connect (or create) a SQLite database at `database_url`.
     /// Example URL: "sqlite://graft.db"
+    #[instrument(skip(database_url))]
     pub async fn connect(database_url: &str) -> std::result::Result<Self, CheckpointerError> {
         let pool = SqlitePool::connect(database_url)
             .await
@@ -114,15 +164,18 @@ impl SQLiteCheckpointer {
 
 #[async_trait::async_trait]
 impl Checkpointer for SQLiteCheckpointer {
+    #[instrument(skip(self, checkpoint), err)]
     async fn save(&self, checkpoint: Checkpoint) -> Result<()> {
         // Serialize using persistence module (serde-based)
         let persisted_state = PersistedState::from(&checkpoint.state);
         let state_json = serde_json::to_string(&persisted_state)
             .map_err(|e| CheckpointerError::Other(format!("state serialize: {e}")))?;
         let frontier_enc: Vec<String> = checkpoint.frontier.iter().map(|k| k.encode()).collect();
-        let frontier_json = serde_json::to_string(&frontier_enc).unwrap();
+        let frontier_json = serde_json::to_string(&frontier_enc)
+            .map_err(|e| CheckpointerError::Other(format!("frontier serialize: {e}")))?;
         let persisted_vs = PersistedVersionsSeen(checkpoint.versions_seen.clone());
-        let versions_seen_json = serde_json::to_string(&persisted_vs).unwrap();
+        let versions_seen_json = serde_json::to_string(&persisted_vs)
+            .map_err(|e| CheckpointerError::Other(format!("versions_seen serialize: {e}")))?;
 
         // Placeholder arrays (StepReport not folded into Checkpoint yet)
         let empty_arr = "[]";
@@ -180,6 +233,7 @@ impl Checkpointer for SQLiteCheckpointer {
         Ok(())
     }
 
+    #[instrument(skip(self, session_id), err)]
     async fn load_latest(&self, session_id: &str) -> Result<Option<Checkpoint>> {
         let row_opt: Option<SqliteRow> = sqlx::query(
             r#"
@@ -273,6 +327,7 @@ impl Checkpointer for SQLiteCheckpointer {
         }))
     }
 
+    #[instrument(skip(self), err)]
     async fn list_sessions(&self) -> Result<Vec<String>> {
         let rows = sqlx::query(
             r#"
