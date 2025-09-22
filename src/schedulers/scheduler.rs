@@ -1,9 +1,11 @@
-use crate::node::{Node, NodeContext, NodePartial};
+use crate::node::{Node, NodeContext, NodeError, NodePartial};
 use crate::state::StateSnapshot;
 use crate::types::NodeKind;
 use futures::stream::{self, StreamExt};
+use miette::Diagnostic;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
+use thiserror::Error;
 use tracing::instrument;
 
 /// Result of running a superstep over the frontier.
@@ -29,6 +31,17 @@ pub struct SchedulerState {
 #[derive(Debug, Default, Clone)]
 pub struct Scheduler {
     pub concurrency_limit: usize,
+}
+
+#[derive(Debug, Error, Diagnostic)]
+pub enum SchedulerError {
+    #[error(transparent)]
+    #[diagnostic(code(graft::scheduler::node))]
+    Node(#[from] NodeError),
+
+    #[error("task join error: {0}")]
+    #[diagnostic(code(graft::scheduler::join))]
+    Join(#[from] tokio::task::JoinError),
 }
 
 impl Scheduler {
@@ -106,7 +119,7 @@ impl Scheduler {
         frontier: Vec<NodeKind>,                    // frontier for this step
         snap: StateSnapshot,                        // pre-barrier snapshot
         step: u64,
-    ) -> StepRunResult {
+    ) -> Result<StepRunResult, SchedulerError> {
         // Partition frontier into to_run vs skipped using a skip predicate and version gating.
         let channels = Self::channel_versions(&snap);
         let skip_predicate = |k: &NodeKind| matches!(k, NodeKind::End);
@@ -130,7 +143,7 @@ impl Scheduler {
         let tasks = to_run_ids
             .iter()
             .cloned()
-            .zip(to_run.iter().cloned())
+            .zip(to_run.clone().into_iter())
             .map(|(id_str, kind)| {
                 let node = nodes
                     .get(&kind)
@@ -142,26 +155,29 @@ impl Scheduler {
                 };
                 let s = snap.clone();
                 async move {
+                    // Return Result and let caller collect
                     let out = node.run(s, ctx).await;
                     (kind, out)
                 }
             });
 
         // Execute with bounded concurrency; completion order may differ.
-        let outputs: Vec<(NodeKind, NodePartial)> = stream::iter(tasks)
-            .buffer_unordered(self.concurrency_limit)
-            .collect()
-            .await;
+        let mut outputs: Vec<(NodeKind, NodePartial)> = Vec::new();
+        let mut stream = stream::iter(tasks).buffer_unordered(self.concurrency_limit);
+        while let Some((kind, res)) = stream.next().await {
+            let part = res?; // NodeError maps via From
+            outputs.push((kind, part));
+        }
 
         // Record versions seen for nodes that ran.
         for id in &to_run_ids {
             self.record_seen_with(state, id, &channels);
         }
 
-        StepRunResult {
+        Ok(StepRunResult {
             ran_nodes: to_run,
             skipped_nodes: skipped_kinds,
             outputs,
-        }
+        })
     }
 }

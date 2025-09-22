@@ -1,5 +1,5 @@
 use super::scheduler::{Scheduler, SchedulerState, StepRunResult};
-use crate::node::{Node, NodeContext, NodePartial};
+use crate::node::{Node, NodeContext, NodePartial, NodeError};
 use crate::state::StateSnapshot;
 use crate::types::NodeKind;
 use async_trait::async_trait;
@@ -14,14 +14,14 @@ struct TestNode {
 
 #[async_trait]
 impl Node for TestNode {
-    async fn run(&self, _snapshot: StateSnapshot, ctx: NodeContext) -> NodePartial {
-        NodePartial {
+    async fn run(&self, _snapshot: StateSnapshot, ctx: NodeContext) -> Result<NodePartial, NodeError> {
+        Ok(NodePartial {
             messages: Some(vec![crate::message::Message {
                 role: "assistant".into(),
                 content: format!("ran:{}:step:{}", self.name, ctx.step),
             }]),
             extra: None,
-        }
+        })
     }
 }
 
@@ -33,15 +33,15 @@ struct DelayedNode {
 
 #[async_trait]
 impl Node for DelayedNode {
-    async fn run(&self, _snapshot: StateSnapshot, ctx: NodeContext) -> NodePartial {
+    async fn run(&self, _snapshot: StateSnapshot, ctx: NodeContext) -> Result<NodePartial, NodeError> {
         sleep(Duration::from_millis(self.delay_ms)).await;
-        NodePartial {
+        Ok(NodePartial {
             messages: Some(vec![crate::message::Message {
                 role: "assistant".into(),
                 content: format!("ran:{}:step:{}", self.name, ctx.step),
             }]),
             extra: None,
-        }
+        })
     }
 }
 
@@ -107,7 +107,8 @@ async fn test_superstep_skips_end_and_nochange() {
     let snap = snap_with_versions(1, 1);
     let res1: StepRunResult = sched
         .superstep(&mut state, &nodes, frontier.clone(), snap.clone(), 1)
-        .await;
+        .await
+        .unwrap();
     // All ran except End
     let ran1: std::collections::HashSet<_> = res1.ran_nodes.iter().cloned().collect();
     assert!(ran1.contains(&NodeKind::Other("A".into())));
@@ -119,7 +120,8 @@ async fn test_superstep_skips_end_and_nochange() {
     // Record_seen happened inside superstep; with same snapshot, nothing should run now.
     let res2 = sched
         .superstep(&mut state, &nodes, frontier.clone(), snap.clone(), 2)
-        .await;
+        .await
+        .unwrap();
     assert!(res2.ran_nodes.is_empty());
     // Both A and B plus End appear in skipped (version-gated or End)
     let skipped2: std::collections::HashSet<_> = res2.skipped_nodes.iter().cloned().collect();
@@ -132,7 +134,8 @@ async fn test_superstep_skips_end_and_nochange() {
     let snap_bump = snap_with_versions(2, 1);
     let res3 = sched
         .superstep(&mut state, &nodes, frontier.clone(), snap_bump, 3)
-        .await;
+        .await
+        .unwrap();
     let ran3: std::collections::HashSet<_> = res3.ran_nodes.iter().cloned().collect();
     assert!(ran3.contains(&NodeKind::Other("A".into())));
     assert!(ran3.contains(&NodeKind::Other("B".into())));
@@ -165,7 +168,8 @@ async fn test_superstep_outputs_order_agnostic() {
 
     let res = sched
         .superstep(&mut state, &nodes, frontier.clone(), snap, 1)
-        .await;
+        .await
+        .unwrap();
 
     // ran_nodes preserves scheduling order (frontier order, after gating)
     assert_eq!(
@@ -208,7 +212,8 @@ async fn test_superstep_serialized_with_limit_1() {
 
     let res = sched
         .superstep(&mut state, &nodes, frontier.clone(), snap, 1)
-        .await;
+        .await
+        .unwrap();
 
     // ran_nodes preserves scheduling order
     assert_eq!(
