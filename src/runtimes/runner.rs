@@ -1,7 +1,7 @@
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
-use super::checkpointer::{Checkpoint, Checkpointer, restore_session_state};
+use super::checkpointer::{Checkpoint, Checkpointer, CheckpointerError, restore_session_state};
 use crate::app::App;
 use crate::channels::Channel;
 use crate::node::NodePartial;
@@ -9,6 +9,9 @@ use crate::runtimes::{CheckpointerType, InMemoryCheckpointer};
 use crate::schedulers::{Scheduler, SchedulerState};
 use crate::state::VersionedState;
 use crate::types::NodeKind;
+use miette::Diagnostic;
+use thiserror::Error;
+use tracing::instrument;
 
 /// Result of executing one superstep in a session.
 #[derive(Debug, Clone)]
@@ -81,6 +84,32 @@ pub struct AppRunner {
 pub enum SessionInit {
     Fresh,
     Resumed { checkpoint_step: u64 },
+}
+
+#[derive(Debug, Error, Diagnostic)]
+pub enum RunnerError {
+    #[error("session not found: {session_id}")]
+    #[diagnostic(code(graft::runner::session_not_found))]
+    SessionNotFound { session_id: String },
+
+    #[error("no nodes to run from START (empty frontier)")]
+    #[diagnostic(
+        code(graft::runner::no_start_nodes),
+        help("Add edges from Start or set the entry node correctly.")
+    )]
+    NoStartNodes,
+
+    #[error("unexpected pause during run_until_complete")]
+    #[diagnostic(code(graft::runner::unexpected_pause))]
+    UnexpectedPause,
+
+    #[error(transparent)]
+    #[diagnostic(code(graft::runner::checkpointer))]
+    Checkpointer(#[from] CheckpointerError),
+
+    #[error("app barrier error: {0}")]
+    #[diagnostic(code(graft::runner::barrier))]
+    AppBarrier(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl AppRunner {
@@ -174,6 +203,7 @@ impl AppRunner {
     }
 
     /// Initialize a new session with the given initial state
+    #[instrument(skip(self, initial_state, session_id), err)]
     pub async fn create_session(
         &mut self,
         session_id: String,
@@ -181,9 +211,9 @@ impl AppRunner {
     ) -> Result<SessionInit, Box<dyn std::error::Error + Send + Sync>> {
         // If checkpointer present and session exists, load instead of creating anew
         let restored_checkpoint = if let Some(cp) = &self.checkpointer {
-            cp.load_latest(&session_id)
-                .await
-                .map_err(|e| e.to_string())?
+            cp.load_latest(&session_id).await.map_err(|e| {
+                Box::new(RunnerError::Checkpointer(e)) as Box<dyn std::error::Error + Send + Sync>
+            })?
         } else {
             None
         };
@@ -203,7 +233,7 @@ impl AppRunner {
             .cloned()
             .unwrap_or_default();
         if frontier.is_empty() {
-            return Err("No nodes to run from START".into());
+            return Err(Box::new(RunnerError::NoStartNodes));
         }
         let default_limit = std::thread::available_parallelism()
             .map(|n| n.get())
@@ -227,6 +257,7 @@ impl AppRunner {
     }
 
     /// Execute one superstep for the given session
+    #[instrument(skip(self, options), err)]
     pub async fn run_step(
         &mut self,
         session_id: &str,
@@ -236,7 +267,11 @@ impl AppRunner {
         let mut session_state = self
             .sessions
             .get(session_id)
-            .ok_or_else(|| format!("Session '{}' not found", session_id))?
+            .ok_or_else(|| {
+                Box::new(RunnerError::SessionNotFound {
+                    session_id: session_id.to_string(),
+                }) as Box<dyn std::error::Error + Send + Sync>
+            })?
             .clone();
 
         // Check if already completed
@@ -304,6 +339,7 @@ impl AppRunner {
     }
 
     /// Helper method that executes exactly one superstep on the given session state
+    #[instrument(skip(self, session_state), err)]
     async fn run_one_superstep(
         &self,
         session_state: &mut SessionState,
@@ -351,7 +387,8 @@ impl AppRunner {
         let updated_channels = self
             .app
             .apply_barrier(&mut update_state, &run_ids, node_partials)
-            .await?;
+            .await
+            .map_err(|e| RunnerError::AppBarrier(e))?;
 
         // Update session state with the modified state
         session_state.state = update_state;
@@ -412,6 +449,7 @@ impl AppRunner {
     }
 
     /// Run until completion (End nodes or no frontier) - the canonical execution method
+    #[instrument(skip(self, session_id), err)]
     pub async fn run_until_complete(
         &mut self,
         session_id: &str,
@@ -420,10 +458,11 @@ impl AppRunner {
 
         loop {
             // Check if we're done before trying to run
-            let session_state = self
-                .sessions
-                .get(session_id)
-                .ok_or_else(|| format!("Session '{}' not found", session_id))?;
+            let session_state = self.sessions.get(session_id).ok_or_else(|| {
+                Box::new(RunnerError::SessionNotFound {
+                    session_id: session_id.to_string(),
+                }) as Box<dyn std::error::Error + Send + Sync>
+            })?;
 
             if session_state.frontier.is_empty()
                 || session_state.frontier.iter().all(|n| *n == NodeKind::End)
@@ -443,16 +482,17 @@ impl AppRunner {
                 }
                 StepResult::Paused(_) => {
                     // This shouldn't happen with default options, but handle gracefully
-                    return Err("Unexpected pause during run_until_complete".into());
+                    return Err(Box::new(RunnerError::UnexpectedPause));
                 }
             }
         }
 
         println!("\n== Final state ==");
-        let final_session = self
-            .sessions
-            .get(session_id)
-            .ok_or_else(|| format!("Session '{}' not found", session_id))?;
+        let final_session = self.sessions.get(session_id).ok_or_else(|| {
+            Box::new(RunnerError::SessionNotFound {
+                session_id: session_id.to_string(),
+            }) as Box<dyn std::error::Error + Send + Sync>
+        })?;
         let final_state = final_session.state.clone();
 
         // Print final state summary (matching App::invoke output)
