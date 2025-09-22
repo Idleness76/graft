@@ -9,6 +9,7 @@ use crate::reducers::ReducerRegistry;
 use crate::runtimes::{CheckpointerType, RuntimeConfig, SessionInit};
 use crate::state::*;
 use crate::types::*;
+use tracing::instrument;
 
 /// Orchestrates graph execution and applies reducers at barriers.
 #[derive(Clone)]
@@ -54,6 +55,7 @@ impl App {
 
     /// Execute until End (or no frontier). Applies reducers after each superstep.
     /// This is now a convenience wrapper around AppRunner.
+    #[instrument(skip(self, initial_state), err)]
     pub async fn invoke(
         &self,
         initial_state: VersionedState,
@@ -90,6 +92,7 @@ impl App {
     }
 
     /// Merge NodePartial updates, invoke reducers, bump versions if content changed.
+    #[instrument(skip(self, state, run_ids, node_partials), err)]
     pub async fn apply_barrier(
         &self,
         state: &mut VersionedState,

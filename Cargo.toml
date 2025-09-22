@@ -4,7 +4,19 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0"
+miette = { version = "7", features = [
+    "fancy",
+] } # fancy feature enables colorful reports
+anyhow = "1.0" # for error handling in main.rs
+thiserror = "1" # for defining error types
+tracing = "0.1" # for structured logging
+tracing-subscriber = { version = "0.3", features = [
+    "env-filter",
+    "fmt",
+    "ansi",
+] } # for setting up tracing/logging
+tracing-error = "0.2" # for capturing spans in errors
+
 async-trait = "0.1"
 futures = "0.3"
 serde_json = "1.0"
@@ -15,7 +27,14 @@ chrono = { version = "0.4", features = ["serde"] }
 rand = "0.9"
 uuid = { version = "1.18", features = ["v4"] }
 rig-core = "0.20"
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "macros", "uuid", "chrono", "json"] }
+sqlx = { version = "0.7", features = [
+    "runtime-tokio-rustls",
+    "sqlite",
+    "macros",
+    "uuid",
+    "chrono",
+    "json",
+] }
 dotenvy = "0.15"
 
 [features]
