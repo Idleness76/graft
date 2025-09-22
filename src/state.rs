@@ -2,7 +2,7 @@ use rustc_hash::FxHashMap;
 use serde_json::Value;
 
 use crate::{
-    channels::{Channel, ExtrasChannel, MessagesChannel},
+    channels::{Channel, ErrorsChannel, ExtrasChannel, MessagesChannel},
     message::Message,
 };
 
@@ -16,6 +16,7 @@ pub struct Versioned<T> {
 pub struct VersionedState {
     pub messages: MessagesChannel,
     pub extra: ExtrasChannel,
+    pub errors: ErrorsChannel,
 }
 
 #[derive(Clone, Debug)]
@@ -35,6 +36,7 @@ impl VersionedState {
         Self {
             messages: MessagesChannel::new(messages, 1),
             extra: ExtrasChannel::default(),
+            errors: ErrorsChannel::default(),
         }
     }
 

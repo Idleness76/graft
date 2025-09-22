@@ -4,6 +4,7 @@ use super::node::{Node, NodeContext, NodeError, NodePartial};
 use super::state::{StateSnapshot, VersionedState};
 use super::types::NodeKind;
 use crate::channels::Channel;
+use crate::channels::errors::pretty_print;
 use crate::message::*;
 use crate::runtimes::{CheckpointerType, RuntimeConfig};
 use async_trait::async_trait;
@@ -45,7 +46,10 @@ impl Node for NodeA {
         let response = completion_model
             .completion(completion_request)
             .await
-            .map_err(|e| NodeError::Provider(e.to_string()))?;
+            .map_err(|e| NodeError::Provider {
+                provider: "ollama",
+                message: e.to_string(),
+            })?;
         println!("model response is: {:?}", response);
 
         let messages: Result<Vec<Message>, serde_json::Error> = response
@@ -105,7 +109,10 @@ impl Node for NodeB {
         let response = completion_model
             .completion(completion_request)
             .await
-            .map_err(|e| NodeError::Provider(e.to_string()))?;
+            .map_err(|e| NodeError::Provider {
+                provider: "ollama",
+                message: e.to_string(),
+            })?;
 
         println!("model response is: {:?}", response);
 
@@ -178,11 +185,16 @@ pub async fn run_demo3() -> Result<()> {
         .compile()
         .map_err(|e| miette::miette!("{e:?}"))?;
 
-    let final_state = app.invoke(init).await.map_err(|e| miette::miette!("{e}"))?;
+    let final_state = app.invoke(init).await?;
     // Optionally log something from the final state to avoid unused warnings
     println!("final messages: {}", final_state.messages.snapshot().len());
 
     println!("== Demo3 complete ==");
+    // Print any error events accumulated
+    let errs = final_state.errors.snapshot();
+    if !errs.is_empty() {
+        println!("\nErrors captured:\n{}", pretty_print(&errs));
+    }
     // Recap totals
 
     Ok(())

@@ -58,6 +58,34 @@ fn make_registry() -> FxHashMap<NodeKind, Arc<dyn Node>> {
     m.insert(NodeKind::End, Arc::new(TestNode { name: "END" }));
     m
 }
+// A node that fails immediately to test error propagation.
+struct FailingNode;
+
+#[async_trait]
+impl Node for FailingNode {
+    async fn run(&self, _snapshot: StateSnapshot, _ctx: NodeContext) -> Result<NodePartial, NodeError> {
+        Err(NodeError::MissingInput { what: "test_key" })
+    }
+}
+
+#[tokio::test]
+async fn test_superstep_propagates_node_error() {
+    let sched = Scheduler::new(4);
+    let mut state = SchedulerState::default();
+    let mut nodes: FxHashMap<NodeKind, Arc<dyn Node>> = FxHashMap::default();
+    nodes.insert(NodeKind::Other("FAIL".into()), Arc::new(FailingNode));
+    let frontier = vec![NodeKind::Other("FAIL".into())];
+    let snap = snap_with_versions(1, 1);
+
+    let res = sched.superstep(&mut state, &nodes, frontier, snap, 1).await;
+    match res {
+        Err(super::scheduler::SchedulerError::NodeRun { source: NodeError::MissingInput { what }, .. }) => {
+            assert_eq!(what, "test_key");
+        }
+        other => panic!("expected SchedulerError::NodeRun(MissingInput), got: {:?}", other),
+    }
+}
+
 
 fn snap_with_versions(msgs_version: u32, extra_version: u32) -> StateSnapshot {
     StateSnapshot {

@@ -4,9 +4,10 @@ use std::sync::Arc;
 use super::checkpointer::{Checkpoint, Checkpointer, CheckpointerError, restore_session_state};
 use crate::app::App;
 use crate::channels::Channel;
+use crate::channels::errors::{ErrorEvent, ErrorScope, LadderError};
 use crate::node::NodePartial;
 use crate::runtimes::{CheckpointerType, InMemoryCheckpointer};
-use crate::schedulers::{Scheduler, SchedulerState};
+use crate::schedulers::{Scheduler, SchedulerError, SchedulerState};
 use crate::state::VersionedState;
 use crate::types::NodeKind;
 use miette::Diagnostic;
@@ -110,6 +111,10 @@ pub enum RunnerError {
     #[error("app barrier error: {0}")]
     #[diagnostic(code(graft::runner::barrier))]
     AppBarrier(#[source] Box<dyn std::error::Error + Send + Sync>),
+
+    #[error(transparent)]
+    #[diagnostic(code(graft::runner::scheduler))]
+    Scheduler(#[from] SchedulerError),
 }
 
 impl AppRunner {
@@ -208,12 +213,12 @@ impl AppRunner {
         &mut self,
         session_id: String,
         initial_state: VersionedState,
-    ) -> Result<SessionInit, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<SessionInit, RunnerError> {
         // If checkpointer present and session exists, load instead of creating anew
         let restored_checkpoint = if let Some(cp) = &self.checkpointer {
-            cp.load_latest(&session_id).await.map_err(|e| {
-                Box::new(RunnerError::Checkpointer(e)) as Box<dyn std::error::Error + Send + Sync>
-            })?
+            cp.load_latest(&session_id)
+                .await
+                .map_err(RunnerError::Checkpointer)?
         } else {
             None
         };
@@ -233,7 +238,7 @@ impl AppRunner {
             .cloned()
             .unwrap_or_default();
         if frontier.is_empty() {
-            return Err(Box::new(RunnerError::NoStartNodes));
+            return Err(RunnerError::NoStartNodes);
         }
         let default_limit = std::thread::available_parallelism()
             .map(|n| n.get())
@@ -262,15 +267,13 @@ impl AppRunner {
         &mut self,
         session_id: &str,
         options: StepOptions,
-    ) -> Result<StepResult, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<StepResult, RunnerError> {
         // Clone session state to avoid borrowing issues
         let mut session_state = self
             .sessions
             .get(session_id)
-            .ok_or_else(|| {
-                Box::new(RunnerError::SessionNotFound {
-                    session_id: session_id.to_string(),
-                }) as Box<dyn std::error::Error + Send + Sync>
+            .ok_or_else(|| RunnerError::SessionNotFound {
+                session_id: session_id.to_string(),
             })?
             .clone();
 
@@ -303,8 +306,78 @@ impl AppRunner {
             }
         }
 
-        // Execute one superstep
-        let step_report = self.run_one_superstep(&mut session_state).await?;
+        // Execute one superstep; on error, emit an ErrorEvent and rethrow
+        let step_report = match self.run_one_superstep(&mut session_state).await {
+            Ok(rep) => rep,
+            Err(e) => {
+                // Build error event
+                let event = match &e {
+                    RunnerError::Scheduler(s) => match s {
+                        crate::schedulers::SchedulerError::NodeRun { kind, step, source } => {
+                            ErrorEvent {
+                                when: chrono::Utc::now(),
+                                scope: ErrorScope::Node {
+                                    kind: format!("{}", kind.encode()),
+                                    step: *step,
+                                },
+                                error: LadderError::msg(format!("{}", source)),
+                                tags: vec!["node".into()],
+                                context: serde_json::json!({}),
+                            }
+                        }
+                        crate::schedulers::SchedulerError::Join(_) => ErrorEvent {
+                            when: chrono::Utc::now(),
+                            scope: ErrorScope::Scheduler {
+                                step: session_state.step,
+                            },
+                            error: LadderError::msg(format!("{}", e)),
+                            tags: vec!["scheduler".into()],
+                            context: serde_json::json!({}),
+                        },
+                    },
+                    _ => ErrorEvent {
+                        when: chrono::Utc::now(),
+                        scope: ErrorScope::Runner {
+                            session: session_id.to_string(),
+                            step: session_state.step,
+                        },
+                        error: LadderError::msg(format!("{}", e)),
+                        tags: vec!["runner".into()],
+                        context: serde_json::json!({
+                            "frontier": session_state.frontier.iter().map(|k| k.encode()).collect::<Vec<_>>()
+                        }),
+                    },
+                };
+                // Inject via barrier mechanics by applying a synthetic NodePartial with extra["errors"]
+                let mut update_state = session_state.state.clone();
+                let partial = NodePartial {
+                    messages: None,
+                    extra: Some({
+                        let mut m = rustc_hash::FxHashMap::default();
+                        m.insert("errors".into(), serde_json::json!([event]));
+                        m
+                    }),
+                };
+                // Apply directly using reducer registry through App
+                let _ = self
+                    .app
+                    .apply_barrier(&mut update_state, &[], vec![partial])
+                    .await;
+                session_state.state = update_state;
+                // Save back to sessions map so callers can inspect accumulated errors
+                self.sessions
+                    .insert(session_id.to_string(), session_state.clone());
+                // Re-persist if autosave
+                if self.autosave
+                    && let Some(cp) = &self.checkpointer
+                {
+                    let _ = cp
+                        .save(Checkpoint::from_session(session_id, &session_state))
+                        .await;
+                }
+                return Err(e);
+            }
+        };
 
         // Update the session in map & persist if configured
         self.sessions
@@ -343,7 +416,7 @@ impl AppRunner {
     async fn run_one_superstep(
         &self,
         session_state: &mut SessionState,
-    ) -> Result<StepReport, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<StepReport, RunnerError> {
         session_state.step += 1;
         let step = session_state.step;
 
@@ -368,8 +441,7 @@ impl AppRunner {
                 snapshot.clone(),
                 step,
             )
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+            .await?;
 
         // Reorder outputs to match ran_nodes order expected by the barrier
         let mut by_kind: FxHashMap<NodeKind, NodePartial> = FxHashMap::default();
@@ -389,7 +461,7 @@ impl AppRunner {
             .app
             .apply_barrier(&mut update_state, &run_ids, node_partials)
             .await
-            .map_err(|e| RunnerError::AppBarrier(e))?;
+            .map_err(RunnerError::AppBarrier)?;
 
         // Update session state with the modified state
         session_state.state = update_state;
@@ -454,16 +526,17 @@ impl AppRunner {
     pub async fn run_until_complete(
         &mut self,
         session_id: &str,
-    ) -> Result<VersionedState, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<VersionedState, RunnerError> {
         println!("== Begin run ==");
 
         loop {
             // Check if we're done before trying to run
-            let session_state = self.sessions.get(session_id).ok_or_else(|| {
-                Box::new(RunnerError::SessionNotFound {
-                    session_id: session_id.to_string(),
-                }) as Box<dyn std::error::Error + Send + Sync>
-            })?;
+            let session_state =
+                self.sessions
+                    .get(session_id)
+                    .ok_or_else(|| RunnerError::SessionNotFound {
+                        session_id: session_id.to_string(),
+                    })?;
 
             if session_state.frontier.is_empty()
                 || session_state.frontier.iter().all(|n| *n == NodeKind::End)
@@ -483,17 +556,18 @@ impl AppRunner {
                 }
                 StepResult::Paused(_) => {
                     // This shouldn't happen with default options, but handle gracefully
-                    return Err(Box::new(RunnerError::UnexpectedPause));
+                    return Err(RunnerError::UnexpectedPause);
                 }
             }
         }
 
         println!("\n== Final state ==");
-        let final_session = self.sessions.get(session_id).ok_or_else(|| {
-            Box::new(RunnerError::SessionNotFound {
-                session_id: session_id.to_string(),
-            }) as Box<dyn std::error::Error + Send + Sync>
-        })?;
+        let final_session =
+            self.sessions
+                .get(session_id)
+                .ok_or_else(|| RunnerError::SessionNotFound {
+                    session_id: session_id.to_string(),
+                })?;
         let final_state = final_session.state.clone();
 
         // Print final state summary (matching App::invoke output)
@@ -530,7 +604,7 @@ impl AppRunner {
 mod tests {
     use super::*;
     use crate::graph::{EdgePredicate, GraphBuilder};
-    use crate::node::{NodeA, NodeB, NodeContext, NodePartial, NodeError};
+    use crate::node::{NodeA, NodeB, NodeContext, NodeError, NodePartial};
 
     use crate::state::{StateSnapshot, VersionedState};
     use async_trait::async_trait;
@@ -541,7 +615,11 @@ mod tests {
 
     #[async_trait]
     impl crate::node::Node for TestNode {
-        async fn run(&self, _snapshot: StateSnapshot, _ctx: NodeContext) -> Result<NodePartial, NodeError> {
+        async fn run(
+            &self,
+            _snapshot: StateSnapshot,
+            _ctx: NodeContext,
+        ) -> Result<NodePartial, NodeError> {
             Ok(NodePartial {
                 messages: Some(vec![crate::message::Message {
                     role: "assistant".into(),
@@ -777,5 +855,52 @@ mod tests {
     async fn test_resume_from_checkpoint() {
         // Ignored placeholder test: resume logic will be revisited for SQLite-backed persistence.
         // Previous implementation contained an early return leading to unreachable code warnings.
+    }
+
+    // A failing node to drive an error path
+    struct FailingNode;
+
+    #[async_trait]
+    impl crate::node::Node for FailingNode {
+        async fn run(
+            &self,
+            _snapshot: StateSnapshot,
+            _ctx: NodeContext,
+        ) -> Result<NodePartial, NodeError> {
+            Err(NodeError::MissingInput { what: "need_foo" })
+        }
+    }
+
+    #[tokio::test]
+    async fn test_error_event_appended_on_failure() {
+        let mut gb = GraphBuilder::new();
+        gb = gb.add_node(NodeKind::Start, NodeA);
+        gb = gb.add_node(NodeKind::Other("X".into()), FailingNode);
+        gb = gb.add_edge(NodeKind::Start, NodeKind::Other("X".into()));
+        gb = gb.set_entry(NodeKind::Start);
+        let app = gb.compile().unwrap();
+        let mut runner = AppRunner::new(app, CheckpointerType::InMemory).await;
+        let initial_state = VersionedState::new_with_user_message("hello");
+
+        assert!(matches!(
+            runner
+                .create_session("err_sess".into(), initial_state)
+                .await
+                .unwrap(),
+            SessionInit::Fresh
+        ));
+
+        let res = runner.run_step("err_sess", StepOptions::default()).await;
+        assert!(res.is_err());
+
+        // Inspect session state for errors array
+        let sess = runner.get_session("err_sess").unwrap();
+        let extra = sess.state.extra.snapshot();
+        if let Some(val) = extra.get("errors") {
+            assert!(val.is_array());
+            assert!(!val.as_array().unwrap().is_empty());
+        } else {
+            panic!("expected errors array to be present in extra");
+        }
     }
 }

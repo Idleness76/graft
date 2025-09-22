@@ -1,4 +1,4 @@
-use graft::run_demo3;
+use graft::{run_demo1, run_demo2, run_demo3};
 use miette::Result;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -33,8 +33,15 @@ async fn main() -> Result<()> {
     init_tracing();
     init_miette();
 
-    // run_demo1::run_demo1().await?;
-    // run_demo2::run_demo2().await
-    run_demo3::run_demo3().await?;
+    // Very small CLI: cargo run -- [demo]
+    // Examples: cargo run -- demo1 | demo2 | demo3
+    let which = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "demo3".to_string());
+    match which.as_str() {
+        "demo1" => run_demo1::run_demo1().await?,
+        "demo2" => run_demo2::run_demo2().await?,
+        "demo3" | _ => run_demo3::run_demo3().await?,
+    }
     Ok(())
 }

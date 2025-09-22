@@ -31,9 +31,9 @@ pub enum NodeError {
     #[diagnostic(code(graft::node::missing_input), help("Check that the previous node produced the required data."))]
     MissingInput { what: &'static str },
 
-    #[error("provider error: {0}")]
+    #[error("provider error ({provider}): {message}")]
     #[diagnostic(code(graft::node::provider))]
-    Provider(String),
+    Provider { provider: &'static str, message: String },
 
     #[error(transparent)]
     #[diagnostic(code(graft::node::serde_json))]
