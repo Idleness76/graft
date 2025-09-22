@@ -47,6 +47,14 @@ Notes for `demo3`:
   - `SQLITE_DB_NAME` env var (filename only)
   - Fallback: `sqlite://graft.db`
 
+  ## Examples (standalone)
+
+  Run the small example that prints prettified error events to the CLI:
+
+  ```bash
+  cargo run --example errors_pretty -q
+  ```
+
 ## Build, test, and logs
 
 Build and test:
