@@ -45,7 +45,10 @@ impl Node for NodeA {
         let response = completion_model
             .completion(completion_request)
             .await
-            .map_err(|e| NodeError::Provider(e.to_string()))?;
+            .map_err(|e| NodeError::Provider {
+                provider: "ollama",
+                message: e.to_string(),
+            })?;
         println!("model response is: {:?}", response);
 
         let messages: Result<Vec<Message>, serde_json::Error> = response
@@ -105,7 +108,10 @@ impl Node for NodeB {
         let response = completion_model
             .completion(completion_request)
             .await
-            .map_err(|e| NodeError::Provider(e.to_string()))?;
+            .map_err(|e| NodeError::Provider {
+                provider: "ollama",
+                message: e.to_string(),
+            })?;
 
         println!("model response is: {:?}", response);
 

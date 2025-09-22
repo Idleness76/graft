@@ -80,7 +80,8 @@ impl App {
 
         let init_state = runner
             .create_session(session_id.clone(), initial_state)
-            .await?;
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
 
         if let SessionInit::Resumed { checkpoint_step } = init_state {
             println!(
@@ -88,7 +89,10 @@ impl App {
                 session_id, checkpoint_step
             );
         }
-        runner.run_until_complete(&session_id).await
+        runner
+            .run_until_complete(&session_id)
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })
     }
 
     /// Merge NodePartial updates, invoke reducers, bump versions if content changed.

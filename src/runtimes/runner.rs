@@ -6,7 +6,7 @@ use crate::app::App;
 use crate::channels::Channel;
 use crate::node::NodePartial;
 use crate::runtimes::{CheckpointerType, InMemoryCheckpointer};
-use crate::schedulers::{Scheduler, SchedulerState};
+use crate::schedulers::{Scheduler, SchedulerError, SchedulerState};
 use crate::state::VersionedState;
 use crate::types::NodeKind;
 use miette::Diagnostic;
@@ -110,6 +110,10 @@ pub enum RunnerError {
     #[error("app barrier error: {0}")]
     #[diagnostic(code(graft::runner::barrier))]
     AppBarrier(#[source] Box<dyn std::error::Error + Send + Sync>),
+
+    #[error(transparent)]
+    #[diagnostic(code(graft::runner::scheduler))]
+    Scheduler(#[from] SchedulerError),
 }
 
 impl AppRunner {
@@ -208,12 +212,10 @@ impl AppRunner {
         &mut self,
         session_id: String,
         initial_state: VersionedState,
-    ) -> Result<SessionInit, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<SessionInit, RunnerError> {
         // If checkpointer present and session exists, load instead of creating anew
         let restored_checkpoint = if let Some(cp) = &self.checkpointer {
-            cp.load_latest(&session_id).await.map_err(|e| {
-                Box::new(RunnerError::Checkpointer(e)) as Box<dyn std::error::Error + Send + Sync>
-            })?
+            cp.load_latest(&session_id).await.map_err(RunnerError::Checkpointer)?
         } else {
             None
         };
@@ -233,7 +235,7 @@ impl AppRunner {
             .cloned()
             .unwrap_or_default();
         if frontier.is_empty() {
-            return Err(Box::new(RunnerError::NoStartNodes));
+            return Err(RunnerError::NoStartNodes);
         }
         let default_limit = std::thread::available_parallelism()
             .map(|n| n.get())
@@ -262,15 +264,13 @@ impl AppRunner {
         &mut self,
         session_id: &str,
         options: StepOptions,
-    ) -> Result<StepResult, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<StepResult, RunnerError> {
         // Clone session state to avoid borrowing issues
         let mut session_state = self
             .sessions
             .get(session_id)
-            .ok_or_else(|| {
-                Box::new(RunnerError::SessionNotFound {
-                    session_id: session_id.to_string(),
-                }) as Box<dyn std::error::Error + Send + Sync>
+            .ok_or_else(|| RunnerError::SessionNotFound {
+                session_id: session_id.to_string(),
             })?
             .clone();
 
@@ -304,7 +304,7 @@ impl AppRunner {
         }
 
         // Execute one superstep
-        let step_report = self.run_one_superstep(&mut session_state).await?;
+    let step_report = self.run_one_superstep(&mut session_state).await?;
 
         // Update the session in map & persist if configured
         self.sessions
@@ -343,7 +343,7 @@ impl AppRunner {
     async fn run_one_superstep(
         &self,
         session_state: &mut SessionState,
-    ) -> Result<StepReport, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<StepReport, RunnerError> {
         session_state.step += 1;
         let step = session_state.step;
 
@@ -368,8 +368,7 @@ impl AppRunner {
                 snapshot.clone(),
                 step,
             )
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+            .await?;
 
         // Reorder outputs to match ran_nodes order expected by the barrier
         let mut by_kind: FxHashMap<NodeKind, NodePartial> = FxHashMap::default();
@@ -389,7 +388,7 @@ impl AppRunner {
             .app
             .apply_barrier(&mut update_state, &run_ids, node_partials)
             .await
-            .map_err(|e| RunnerError::AppBarrier(e))?;
+            .map_err(RunnerError::AppBarrier)?;
 
         // Update session state with the modified state
         session_state.state = update_state;
@@ -454,15 +453,13 @@ impl AppRunner {
     pub async fn run_until_complete(
         &mut self,
         session_id: &str,
-    ) -> Result<VersionedState, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<VersionedState, RunnerError> {
         println!("== Begin run ==");
 
         loop {
             // Check if we're done before trying to run
-            let session_state = self.sessions.get(session_id).ok_or_else(|| {
-                Box::new(RunnerError::SessionNotFound {
-                    session_id: session_id.to_string(),
-                }) as Box<dyn std::error::Error + Send + Sync>
+            let session_state = self.sessions.get(session_id).ok_or_else(|| RunnerError::SessionNotFound {
+                session_id: session_id.to_string(),
             })?;
 
             if session_state.frontier.is_empty()
@@ -483,16 +480,14 @@ impl AppRunner {
                 }
                 StepResult::Paused(_) => {
                     // This shouldn't happen with default options, but handle gracefully
-                    return Err(Box::new(RunnerError::UnexpectedPause));
+                    return Err(RunnerError::UnexpectedPause);
                 }
             }
         }
 
         println!("\n== Final state ==");
-        let final_session = self.sessions.get(session_id).ok_or_else(|| {
-            Box::new(RunnerError::SessionNotFound {
-                session_id: session_id.to_string(),
-            }) as Box<dyn std::error::Error + Send + Sync>
+        let final_session = self.sessions.get(session_id).ok_or_else(|| RunnerError::SessionNotFound {
+            session_id: session_id.to_string(),
         })?;
         let final_state = final_session.state.clone();
 
