@@ -2,10 +2,11 @@ use rustc_hash::FxHashMap;
 
 use crate::{
     node::NodePartial,
-    reducers::{AddMessages, MapMerge, Reducer},
+    reducers::{AddMessages, MapMerge, Reducer, ReducerError},
     state::VersionedState,
     types::ChannelType,
 };
+use tracing::instrument;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ReducerType {
@@ -65,12 +66,13 @@ impl Default for ReducerRegistry {
 }
 
 impl ReducerRegistry {
+    #[instrument(skip(self, state, to_update), err)]
     pub fn try_update(
         &self,
         channel_type: ChannelType,
         state: &mut VersionedState,
         to_update: &NodePartial,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(), ReducerError> {
         // Skip if the partial has no applicable data for this channel.
         if !channel_guard(&channel_type, to_update) {
             return Ok(());
@@ -82,18 +84,16 @@ impl ReducerRegistry {
             }
             Ok(())
         } else {
-            Err(Box::new(std::io::Error::other(format!(
-                "could not find reducers for given channel: {:?}",
-                channel_type
-            ))))
+            Err(ReducerError::UnknownChannel(channel_type))
         }
     }
 
+    #[instrument(skip(self, state, merged_updates), err)]
     pub fn apply_all(
         &self,
         state: &mut VersionedState,
         merged_updates: &NodePartial,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(), ReducerError> {
         // Iterate all registered channels; try_update will skip via guard if no data.
         for channel in self.reducer_map.keys() {
             self.try_update(channel.clone(), state, merged_updates)?;
