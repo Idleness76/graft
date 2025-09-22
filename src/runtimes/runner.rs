@@ -368,7 +368,8 @@ impl AppRunner {
                 snapshot.clone(),
                 step,
             )
-            .await;
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
         // Reorder outputs to match ran_nodes order expected by the barrier
         let mut by_kind: FxHashMap<NodeKind, NodePartial> = FxHashMap::default();
@@ -529,7 +530,7 @@ impl AppRunner {
 mod tests {
     use super::*;
     use crate::graph::{EdgePredicate, GraphBuilder};
-    use crate::node::{NodeA, NodeB, NodeContext, NodePartial};
+    use crate::node::{NodeA, NodeB, NodeContext, NodePartial, NodeError};
 
     use crate::state::{StateSnapshot, VersionedState};
     use async_trait::async_trait;
@@ -540,14 +541,14 @@ mod tests {
 
     #[async_trait]
     impl crate::node::Node for TestNode {
-        async fn run(&self, _snapshot: StateSnapshot, _ctx: NodeContext) -> NodePartial {
-            NodePartial {
+        async fn run(&self, _snapshot: StateSnapshot, _ctx: NodeContext) -> Result<NodePartial, NodeError> {
+            Ok(NodePartial {
                 messages: Some(vec![crate::message::Message {
                     role: "assistant".into(),
                     content: self.message.clone(),
                 }]),
                 extra: None,
-            }
+            })
         }
     }
 
