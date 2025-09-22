@@ -7,17 +7,20 @@ use crate::channels::Channel;
 use crate::message::*;
 use crate::runtimes::{CheckpointerType, RuntimeConfig};
 use async_trait::async_trait;
+use miette::Result;
 use rig::client::CompletionClient;
 use rig::completion::CompletionModel;
 use rig::providers::ollama;
 use rustc_hash::FxHashMap;
 use serde_json::{Value, json};
 use std::sync::Arc;
+use tracing::instrument;
 
 struct NodeA;
 
 #[async_trait]
 impl Node for NodeA {
+    #[instrument(skip(self, snapshot, _ctx))]
     async fn run(&self, snapshot: StateSnapshot, _ctx: NodeContext) -> NodePartial {
         //this will be the first node to run, first message should be the user prompt
         // can validate ctx.step if necessary
@@ -59,6 +62,7 @@ struct NodeB;
 
 #[async_trait]
 impl Node for NodeB {
+    #[instrument(skip(self, snapshot, _ctx))]
     async fn run(&self, snapshot: StateSnapshot, _ctx: NodeContext) -> NodePartial {
         let cat_iterations = serde_json::from_value::<i32>(
             snapshot
@@ -117,7 +121,8 @@ impl Node for NodeB {
 /// 2. Inspecting StepRunResult (ran/skipped/outputs)
 /// 3. Manual concurrency control and version gating
 /// 4. Barrier application using StepRunResult outputs
-pub async fn run_demo3() -> anyhow::Result<()> {
+#[instrument]
+pub async fn run_demo3() -> Result<()> {
     println!("\n==============================");
     println!("== Demo3: Let's Rig this bad boy ==");
     println!("==============================\n");
@@ -159,9 +164,11 @@ pub async fn run_demo3() -> anyhow::Result<()> {
             sqlite_db_name: None,
         })
         .compile()
-        .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?;
+        .map_err(|e| miette::miette!("{e:?}"))?;
 
     let final_state = app.invoke(init).await.unwrap();
+    // Optionally log something from the final state to avoid unused warnings
+    println!("final messages: {}", final_state.messages.snapshot().len());
 
     println!("== Demo3 complete ==");
     // Recap totals
