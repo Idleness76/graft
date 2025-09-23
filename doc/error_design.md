@@ -63,3 +63,50 @@ The unified error handling design provides:
 - Typed `RunnerError` for control flow and user diagnostics.
 - Structured `ErrorEvent` persisted via the dedicated `ErrorsChannel` with proper reducer support.
 - Clean, single-path design that's consistent with the rest of the channel architecture.
+
+## Testing error persistence
+
+The implementation includes comprehensive tests to verify that error events are properly persisted to the database and restored correctly. These tests serve as both verification and documentation of the error persistence capabilities.
+
+### Running the error persistence tests
+
+To run just the error persistence tests:
+```bash
+cargo test test_error_persistence
+```
+
+To run the tests with console output (showing success messages and details):
+```bash
+cargo test test_error_persistence -- --nocapture
+```
+
+### What the tests verify
+
+The persistence tests include:
+
+1. **`test_error_persistence_roundtrip()`** - End-to-end persistence verification:
+   - Creates error events with different scopes (Node, App, Scheduler)
+   - Tests error details, tags, context data, and cause chains
+   - Saves to SQLite database via checkpointing
+   - Loads from database and verifies all data is preserved
+
+2. **`test_error_serialization_format()`** - Format compatibility verification:
+   - Tests complex nested JSON data in error details and context
+   - Verifies error cause chains with nested details
+   - Ensures serialization format stability for cross-version compatibility
+
+When run with `--nocapture`, the tests output detailed success information:
+```
+✅ Error persistence test completed successfully!
+   - Saved 3 error events to database
+   - Restored 3 error events from database
+   - All error details, scopes, tags, and context preserved
+   - Error cause chains correctly serialized/deserialized
+
+✅ Error serialization format test passed!
+   - Complex nested JSON data preserved
+   - Error cause chains with details preserved
+   - All context and metadata intact
+```
+
+These tests serve as proof that the unified error handling system works end-to-end and can be used by anyone to verify the implementation.
