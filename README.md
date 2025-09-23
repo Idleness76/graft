@@ -4,7 +4,7 @@ A Rust framework for graph-driven, concurrent agent workflows with explicit, ver
 
 ## Highlights
 
-- Versioned, channelized state: `messages`, `extra`, and an in-memory `errors` channel
+- Versioned, channelized state: `messages`, `extra`, and a persisted `errors` channel
 - Deterministic barrier merges via a pluggable reducer registry
 - Bounded-concurrency scheduler with version gating (superstep barrier model)
 - Strong, typed error propagation across nodes, scheduler, and runner (thiserror + miette)
@@ -76,7 +76,7 @@ RUST_LOG=debug cargo run -- demo2
 
 - Nodes return `Result<NodePartial, NodeError>`
 - Scheduler returns `Result<StepRunResult, SchedulerError>`; node failures include context (`kind`, `step`)
-- Runner surfaces `RunnerError` and, on failure, emits an `ErrorEvent` into `extra["errors"]` and the in-memory `errors` channel
+- Runner surfaces `RunnerError` and, on failure, emits an `ErrorEvent` into the dedicated errors channel via `NodePartial.errors`
 - Demos print a human-friendly error ladder via `errors::pretty_print` at the end
 - Binaries return `miette::Result`, so typed errors render nicely without extra glue code
 
