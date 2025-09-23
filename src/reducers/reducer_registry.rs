@@ -1,10 +1,8 @@
 use rustc_hash::FxHashMap;
 
 use crate::{
-    channels::Channel,
-    channels::errors::ErrorEvent,
     node::NodePartial,
-    reducers::{AddMessages, MapMerge, Reducer, ReducerError},
+    reducers::{AddMessages, AddErrors, MapMerge, Reducer, ReducerError},
     state::VersionedState,
     types::ChannelType,
 };
@@ -14,7 +12,7 @@ use tracing::instrument;
 pub enum ReducerType {
     AddMessages(AddMessages),
     JsonShallowMerge(MapMerge),
-    AppendErrors,
+    AddErrors(AddErrors),
 }
 
 impl ReducerType {
@@ -22,18 +20,7 @@ impl ReducerType {
         match self {
             ReducerType::AddMessages(r) => r.apply(state, update),
             ReducerType::JsonShallowMerge(r) => r.apply(state, update),
-            ReducerType::AppendErrors => {
-                if let Some(ex) = &update.extra {
-                    if let Some(val) = ex.get("errors") {
-                        let events: Result<Vec<ErrorEvent>, _> =
-                            serde_json::from_value(val.clone());
-                        if let Ok(mut events) = events {
-                            let dst = state.errors.get_mut();
-                            dst.append(&mut events);
-                        }
-                    }
-                }
-            }
+            ReducerType::AddErrors(r) => r.apply(state, update),
         }
     }
 }
@@ -59,11 +46,9 @@ fn channel_guard(channel: &ChannelType, partial: &NodePartial) -> bool {
             .map(|m| !m.is_empty())
             .unwrap_or(false),
         ChannelType::Error => partial
-            .extra
+            .errors
             .as_ref()
-            .and_then(|m| m.get("errors"))
-            .and_then(|v| v.as_array())
-            .map(|a| !a.is_empty())
+            .map(|v| !v.is_empty())
             .unwrap_or(false),
     }
 }
@@ -82,7 +67,7 @@ impl Default for ReducerRegistry {
             vec![ReducerType::JsonShallowMerge(MapMerge)],
         );
 
-        reducer_map.insert(ChannelType::Error, vec![ReducerType::AppendErrors]);
+        reducer_map.insert(ChannelType::Error, vec![ReducerType::AddErrors(AddErrors)]);
 
         ReducerRegistry { reducer_map }
     }

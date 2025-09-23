@@ -1,5 +1,5 @@
 use super::scheduler::{Scheduler, SchedulerState, StepRunResult};
-use crate::node::{Node, NodeContext, NodePartial, NodeError};
+use crate::node::{Node, NodeContext, NodeError, NodePartial};
 use crate::state::StateSnapshot;
 use crate::types::NodeKind;
 use async_trait::async_trait;
@@ -14,13 +14,18 @@ struct TestNode {
 
 #[async_trait]
 impl Node for TestNode {
-    async fn run(&self, _snapshot: StateSnapshot, ctx: NodeContext) -> Result<NodePartial, NodeError> {
+    async fn run(
+        &self,
+        _snapshot: StateSnapshot,
+        ctx: NodeContext,
+    ) -> Result<NodePartial, NodeError> {
         Ok(NodePartial {
             messages: Some(vec![crate::message::Message {
                 role: "assistant".into(),
                 content: format!("ran:{}:step:{}", self.name, ctx.step),
             }]),
             extra: None,
+            errors: None,
         })
     }
 }
@@ -33,7 +38,11 @@ struct DelayedNode {
 
 #[async_trait]
 impl Node for DelayedNode {
-    async fn run(&self, _snapshot: StateSnapshot, ctx: NodeContext) -> Result<NodePartial, NodeError> {
+    async fn run(
+        &self,
+        _snapshot: StateSnapshot,
+        ctx: NodeContext,
+    ) -> Result<NodePartial, NodeError> {
         sleep(Duration::from_millis(self.delay_ms)).await;
         Ok(NodePartial {
             messages: Some(vec![crate::message::Message {
@@ -41,6 +50,7 @@ impl Node for DelayedNode {
                 content: format!("ran:{}:step:{}", self.name, ctx.step),
             }]),
             extra: None,
+            errors: None,
         })
     }
 }
@@ -58,12 +68,17 @@ fn make_registry() -> FxHashMap<NodeKind, Arc<dyn Node>> {
     m.insert(NodeKind::End, Arc::new(TestNode { name: "END" }));
     m
 }
+
 // A node that fails immediately to test error propagation.
 struct FailingNode;
 
 #[async_trait]
 impl Node for FailingNode {
-    async fn run(&self, _snapshot: StateSnapshot, _ctx: NodeContext) -> Result<NodePartial, NodeError> {
+    async fn run(
+        &self,
+        _snapshot: StateSnapshot,
+        _ctx: NodeContext,
+    ) -> Result<NodePartial, NodeError> {
         Err(NodeError::MissingInput { what: "test_key" })
     }
 }
@@ -79,13 +94,18 @@ async fn test_superstep_propagates_node_error() {
 
     let res = sched.superstep(&mut state, &nodes, frontier, snap, 1).await;
     match res {
-        Err(super::scheduler::SchedulerError::NodeRun { source: NodeError::MissingInput { what }, .. }) => {
+        Err(super::scheduler::SchedulerError::NodeRun {
+            source: NodeError::MissingInput { what },
+            ..
+        }) => {
             assert_eq!(what, "test_key");
         }
-        other => panic!("expected SchedulerError::NodeRun(MissingInput), got: {:?}", other),
+        other => panic!(
+            "expected SchedulerError::NodeRun(MissingInput), got: {:?}",
+            other
+        ),
     }
 }
-
 
 fn snap_with_versions(msgs_version: u32, extra_version: u32) -> StateSnapshot {
     StateSnapshot {

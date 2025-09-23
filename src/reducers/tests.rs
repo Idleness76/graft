@@ -49,6 +49,7 @@ fn test_add_messages_appends_state() {
             content: "b".into(),
         }]),
         extra: None,
+        errors: None,
     };
 
     reducer.apply(&mut state, &partial);
@@ -71,6 +72,7 @@ fn test_add_messages_empty_partial_noop() {
     let partial = NodePartial {
         messages: Some(vec![]),
         extra: None,
+        errors: None,
     };
 
     reducer.apply(&mut state, &partial);
@@ -101,6 +103,7 @@ fn test_map_merge_merges_and_overwrites_state() {
     let partial = NodePartial {
         messages: None,
         extra: Some(extra_update),
+        errors: None,
     };
 
     reducer.apply(&mut state, &partial);
@@ -134,6 +137,7 @@ fn test_map_merge_empty_partial_noop() {
     let partial = NodePartial {
         messages: None,
         extra: Some(FxHashMap::default()),
+        errors: None,
     };
 
     reducer.apply(&mut state, &partial);
@@ -168,6 +172,7 @@ fn test_enum_wrapper_dispatch() {
             content: "hi".into(),
         }]),
         extra: Some(extra_update),
+        errors: None,
     };
 
     for r in &reducers {
@@ -206,6 +211,7 @@ fn test_channel_guard_logic() {
     let extra_partial = NodePartial {
         messages: None,
         extra: Some(extra_map),
+        errors: None,
     };
     assert!(channel_guard(ChannelType::Extra, &extra_partial));
 }
@@ -228,6 +234,7 @@ fn test_registry_integration_like_flow() {
             content: "from node".into(),
         }]),
         extra: Some(extra_update),
+        errors: None,
     };
 
     // Simulate runtime iterating channels

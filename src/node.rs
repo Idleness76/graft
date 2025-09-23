@@ -1,9 +1,10 @@
+use crate::channels::errors::ErrorEvent;
 use crate::message::*;
 use crate::state::*;
 use async_trait::async_trait;
+use miette::Diagnostic;
 use rustc_hash::FxHashMap;
 use serde_json::json;
-use miette::Diagnostic;
 use thiserror::Error;
 
 #[derive(Clone, Debug)]
@@ -18,22 +19,34 @@ pub struct NodePartial {
     pub messages: Option<Vec<Message>>,
     /// Optional map of arbitrary extension data (JSON values).
     pub extra: Option<FxHashMap<String, serde_json::Value>>,
+    /// Optional list of error events to append.
+    pub errors: Option<Vec<ErrorEvent>>,
 }
 
 #[async_trait]
 pub trait Node: Send + Sync {
-    async fn run(&self, snapshot: StateSnapshot, ctx: NodeContext) -> Result<NodePartial, NodeError>;
+    async fn run(
+        &self,
+        snapshot: StateSnapshot,
+        ctx: NodeContext,
+    ) -> Result<NodePartial, NodeError>;
 }
 
 #[derive(Debug, Error, Diagnostic)]
 pub enum NodeError {
     #[error("missing expected input: {what}")]
-    #[diagnostic(code(graft::node::missing_input), help("Check that the previous node produced the required data."))]
+    #[diagnostic(
+        code(graft::node::missing_input),
+        help("Check that the previous node produced the required data.")
+    )]
     MissingInput { what: &'static str },
 
     #[error("provider error ({provider}): {message}")]
     #[diagnostic(code(graft::node::provider))]
-    Provider { provider: &'static str, message: String },
+    Provider {
+        provider: &'static str,
+        message: String,
+    },
 
     #[error(transparent)]
     #[diagnostic(code(graft::node::serde_json))]
@@ -48,7 +61,11 @@ pub struct NodeA;
 
 #[async_trait]
 impl Node for NodeA {
-    async fn run(&self, snapshot: StateSnapshot, ctx: NodeContext) -> Result<NodePartial, NodeError> {
+    async fn run(
+        &self,
+        snapshot: StateSnapshot,
+        ctx: NodeContext,
+    ) -> Result<NodePartial, NodeError> {
         let seen_msgs = snapshot.messages.len();
         let content = format!("A saw {} msgs at step {}", seen_msgs, ctx.step);
 
@@ -63,6 +80,7 @@ impl Node for NodeA {
                 content,
             }]),
             extra: Some(extra),
+            errors: None,
         })
     }
 }
@@ -71,7 +89,11 @@ pub struct NodeB;
 
 #[async_trait]
 impl Node for NodeB {
-    async fn run(&self, snapshot: StateSnapshot, ctx: NodeContext) -> Result<NodePartial, NodeError> {
+    async fn run(
+        &self,
+        snapshot: StateSnapshot,
+        ctx: NodeContext,
+    ) -> Result<NodePartial, NodeError> {
         let content = format!(
             "B ran at step {} (prev msgs={})",
             ctx.step,
@@ -87,6 +109,7 @@ impl Node for NodeB {
                 content,
             }]),
             extra: Some(extra),
+            errors: None,
         })
     }
 }
@@ -112,7 +135,7 @@ mod tests {
             extra_version: 1,
         };
         let ctx = make_ctx(5);
-    let result = node.run(snap.clone(), ctx).await.unwrap();
+        let result = node.run(snap.clone(), ctx).await.unwrap();
         assert!(result.messages.is_some());
         let msg = &result.messages.as_ref().unwrap()[0];
         assert_eq!(msg.role, "assistant");
@@ -136,7 +159,7 @@ mod tests {
             extra_version: 1,
         };
         let ctx = make_ctx(7);
-    let result = node.run(snap.clone(), ctx).await.unwrap();
+        let result = node.run(snap.clone(), ctx).await.unwrap();
         let msg = &result.messages.as_ref().unwrap()[0];
         assert_eq!(msg.content, "A saw 1 msgs at step 7");
     }
@@ -151,7 +174,7 @@ mod tests {
             extra_version: 1,
         };
         let ctx = make_ctx(3);
-    let result = node.run(snap.clone(), ctx).await.unwrap();
+        let result = node.run(snap.clone(), ctx).await.unwrap();
         assert!(result.messages.is_some());
         let msg = &result.messages.as_ref().unwrap()[0];
         assert_eq!(msg.content, "B ran at step 3 (prev msgs=0)");
@@ -172,7 +195,7 @@ mod tests {
             extra_version: 1,
         };
         let ctx = make_ctx(8);
-    let result = node.run(snap.clone(), ctx).await.unwrap();
+        let result = node.run(snap.clone(), ctx).await.unwrap();
         let msg = &result.messages.as_ref().unwrap()[0];
         assert_eq!(msg.content, "B ran at step 8 (prev msgs=1)");
     }

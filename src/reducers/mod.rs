@@ -1,12 +1,10 @@
 mod add_messages;
-mod append_vec;
+mod add_errors;
 mod map_merge;
 mod reducer_registry;
 
 pub use add_messages::AddMessages;
-/* AppendVec temporarily disabled (implementation commented out in append_vec.rs)
-pub use append_vec::AppendVec;
-*/
+pub use add_errors::AddErrors;
 pub use map_merge::MapMerge;
 pub use reducer_registry::*;
 
