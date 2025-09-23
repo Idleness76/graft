@@ -65,6 +65,7 @@ impl Node for NodeA {
         Ok(NodePartial {
             messages: Some(messages.map_err(NodeError::from)?),
             extra: None,
+            errors: None,
         })
     }
 }
@@ -131,6 +132,7 @@ impl Node for NodeB {
         Ok(NodePartial {
             messages: Some(messages.map_err(NodeError::from)?),
             extra: Some(extra),
+            errors: None,
         })
     }
 }
