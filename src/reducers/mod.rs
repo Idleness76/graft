@@ -1,10 +1,10 @@
-mod add_messages;
 mod add_errors;
+mod add_messages;
 mod map_merge;
 mod reducer_registry;
 
-pub use add_messages::AddMessages;
 pub use add_errors::AddErrors;
+pub use add_messages::AddMessages;
 pub use map_merge::MapMerge;
 pub use reducer_registry::*;
 
