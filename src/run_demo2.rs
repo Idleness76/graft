@@ -2,14 +2,15 @@ use rustc_hash::FxHashMap;
 use serde_json::json;
 
 use crate::channels::Channel;
+use crate::event_bus::EventBus;
 
 use super::graph::GraphBuilder;
 use super::node::{NodeA, NodeB, NodePartial};
 use super::schedulers::{Scheduler, SchedulerState, StepRunResult};
 use super::state::VersionedState;
 use super::types::NodeKind;
-use miette::Result;
 use crate::channels::errors::pretty_print;
+use miette::Result;
 
 /// Demonstration run showcasing:
 /// 1. Building and executing a small multi-step graph using Scheduler
@@ -43,8 +44,8 @@ pub async fn run_demo2() -> Result<()> {
         .add_edge(NodeKind::Other("A".into()), NodeKind::Other("B".into()))
         .add_edge(NodeKind::Other("B".into()), NodeKind::End)
         .set_entry(NodeKind::Start)
-    .compile()
-    .map_err(|e| miette::miette!("{e:?}"))?;
+        .compile()
+        .map_err(|e| miette::miette!("{e:?}"))?;
 
     // 3. Prepare scheduler with explicit concurrency limit
     let scheduler = Scheduler::new(2); // Try changing to 1 for serial demo
@@ -84,6 +85,7 @@ pub async fn run_demo2() -> Result<()> {
         );
         println!("Current frontier: {:?}", frontier);
 
+        let event_bus = EventBus::default();
         // Use scheduler to run the frontier (scheduler decides run vs skip)
         let step_result: StepRunResult = scheduler
             .superstep(
@@ -92,6 +94,7 @@ pub async fn run_demo2() -> Result<()> {
                 frontier.clone(),
                 snapshot.clone(),
                 step,
+                event_bus.get_sender(),
             )
             .await?;
         // Update counters and print high-level result

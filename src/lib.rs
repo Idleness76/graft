@@ -1,5 +1,6 @@
 pub mod app;
 pub mod channels;
+pub mod event_bus;
 pub mod graph;
 pub mod message;
 pub mod node;
@@ -7,6 +8,7 @@ pub mod reducers;
 pub mod run_demo1;
 pub mod run_demo2;
 pub mod run_demo3;
+pub mod run_demo4;
 pub mod runtimes;
 pub mod schedulers;
 pub mod state;

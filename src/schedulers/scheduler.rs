@@ -1,3 +1,4 @@
+use crate::event_bus::Event;
 use crate::node::{Node, NodeContext, NodeError, NodePartial};
 use crate::state::StateSnapshot;
 use crate::types::NodeKind;
@@ -124,6 +125,7 @@ impl Scheduler {
         frontier: Vec<NodeKind>,                    // frontier for this step
         snap: StateSnapshot,                        // pre-barrier snapshot
         step: u64,
+        event_bus_sender: flume::Sender<Event>,
     ) -> Result<StepRunResult, SchedulerError> {
         // Partition frontier into to_run vs skipped using a skip predicate and version gating.
         let channels = Self::channel_versions(&snap);
@@ -154,9 +156,11 @@ impl Scheduler {
                     .get(&kind)
                     .expect("node in frontier not found")
                     .clone();
+                let event_bus_sender = event_bus_sender.clone();
                 let ctx = NodeContext {
                     node_id: id_str.clone(),
                     step,
+                    event_bus_sender,
                 };
                 let s = snap.clone();
                 async move {

@@ -5,6 +5,7 @@ use super::state::{StateSnapshot, VersionedState};
 use super::types::NodeKind;
 use crate::channels::Channel;
 use crate::channels::errors::pretty_print;
+use crate::event_bus::Event;
 use crate::message::*;
 use crate::runtimes::{CheckpointerType, RuntimeConfig};
 use async_trait::async_trait;
@@ -73,11 +74,11 @@ struct NodeB;
 
 #[async_trait]
 impl Node for NodeB {
-    #[instrument(skip(self, snapshot, _ctx))]
+    #[instrument(skip(self, snapshot, ctx))]
     async fn run(
         &self,
         snapshot: StateSnapshot,
-        _ctx: NodeContext,
+        ctx: NodeContext,
     ) -> Result<NodePartial, NodeError> {
         let cat_iterations = serde_json::from_value::<i32>(
             snapshot
@@ -92,10 +93,15 @@ impl Node for NodeB {
         let client = ollama::Client::new();
         let completion_model = client.completion_model("gemma3");
 
-        println!(
-            "first joke run is: {}, number of cat iterations is {}",
-            joke_response.content, cat_iterations
-        );
+        ctx.event_bus_sender
+            .send(Event {
+                context: "Node B".to_owned(),
+                message: format!(
+                    "first joke run is: {}, number of cat iterations is {}",
+                    joke_response.content, cat_iterations
+                ),
+            })
+            .unwrap();
 
         let completion_request = completion_model
             .completion_request(rig::completion::Message::user(format!(
@@ -178,7 +184,7 @@ pub async fn run_demo3() -> Result<()> {
         //.add_edge(NodeKind::Other("B".into()), NodeKind::End)
         .set_entry(NodeKind::Start)
         .with_runtime_config(RuntimeConfig {
-            session_id: Some("alads_7".into()),
+            session_id: Some("alads_8".into()),
             checkpointer: Some(CheckpointerType::SQLite),
             sqlite_db_name: None,
         })

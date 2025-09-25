@@ -1,4 +1,4 @@
-use graft::{run_demo1, run_demo2, run_demo3};
+use graft::{run_demo1, run_demo2, run_demo3, run_demo4};
 use miette::Result;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -13,7 +13,7 @@ fn init_tracing() {
         .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE);
 
     let filter = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info,graft=debug"))
+        .or_else(|_| EnvFilter::try_new("error,graft=error"))
         .unwrap();
 
     tracing_subscriber::registry()
@@ -37,11 +37,12 @@ async fn main() -> Result<()> {
     // Examples: cargo run -- demo1 | demo2 | demo3
     let which = std::env::args()
         .nth(1)
-        .unwrap_or_else(|| "demo3".to_string());
+        .unwrap_or_else(|| "demo4".to_string());
     match which.as_str() {
         "demo1" => run_demo1::run_demo1().await?,
         "demo2" => run_demo2::run_demo2().await?,
-        "demo3" | _ => run_demo3::run_demo3().await?,
+        "demo3" => run_demo3::run_demo3().await?,
+        "demo4" | _ => run_demo4::run_demo4().await?,
     }
     Ok(())
 }

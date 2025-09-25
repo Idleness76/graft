@@ -1,5 +1,6 @@
 use super::scheduler::{Scheduler, SchedulerState, StepRunResult};
-use crate::node::{Node, NodeContext, NodePartial, NodeError};
+use crate::event_bus::EventBus;
+use crate::node::{Node, NodeContext, NodeError, NodePartial};
 use crate::state::StateSnapshot;
 use crate::types::NodeKind;
 use async_trait::async_trait;
@@ -14,7 +15,11 @@ struct TestNode {
 
 #[async_trait]
 impl Node for TestNode {
-    async fn run(&self, _snapshot: StateSnapshot, ctx: NodeContext) -> Result<NodePartial, NodeError> {
+    async fn run(
+        &self,
+        _snapshot: StateSnapshot,
+        ctx: NodeContext,
+    ) -> Result<NodePartial, NodeError> {
         Ok(NodePartial {
             messages: Some(vec![crate::message::Message {
                 role: "assistant".into(),
@@ -33,7 +38,11 @@ struct DelayedNode {
 
 #[async_trait]
 impl Node for DelayedNode {
-    async fn run(&self, _snapshot: StateSnapshot, ctx: NodeContext) -> Result<NodePartial, NodeError> {
+    async fn run(
+        &self,
+        _snapshot: StateSnapshot,
+        ctx: NodeContext,
+    ) -> Result<NodePartial, NodeError> {
         sleep(Duration::from_millis(self.delay_ms)).await;
         Ok(NodePartial {
             messages: Some(vec![crate::message::Message {
@@ -63,7 +72,11 @@ struct FailingNode;
 
 #[async_trait]
 impl Node for FailingNode {
-    async fn run(&self, _snapshot: StateSnapshot, _ctx: NodeContext) -> Result<NodePartial, NodeError> {
+    async fn run(
+        &self,
+        _snapshot: StateSnapshot,
+        _ctx: NodeContext,
+    ) -> Result<NodePartial, NodeError> {
         Err(NodeError::MissingInput { what: "test_key" })
     }
 }
@@ -77,15 +90,30 @@ async fn test_superstep_propagates_node_error() {
     let frontier = vec![NodeKind::Other("FAIL".into())];
     let snap = snap_with_versions(1, 1);
 
-    let res = sched.superstep(&mut state, &nodes, frontier, snap, 1).await;
+    let event_bus = EventBus::default();
+    let res = sched
+        .superstep(
+            &mut state,
+            &nodes,
+            frontier,
+            snap,
+            1,
+            event_bus.get_sender(),
+        )
+        .await;
     match res {
-        Err(super::scheduler::SchedulerError::NodeRun { source: NodeError::MissingInput { what }, .. }) => {
+        Err(super::scheduler::SchedulerError::NodeRun {
+            source: NodeError::MissingInput { what },
+            ..
+        }) => {
             assert_eq!(what, "test_key");
         }
-        other => panic!("expected SchedulerError::NodeRun(MissingInput), got: {:?}", other),
+        other => panic!(
+            "expected SchedulerError::NodeRun(MissingInput), got: {:?}",
+            other
+        ),
     }
 }
-
 
 fn snap_with_versions(msgs_version: u32, extra_version: u32) -> StateSnapshot {
     StateSnapshot {
@@ -130,11 +158,18 @@ async fn test_superstep_skips_end_and_nochange() {
         NodeKind::End,
         NodeKind::Other("B".into()),
     ];
-
+    let event_bus = EventBus::default();
     // First run: nothing recorded, both A and B should run; End skipped.
     let snap = snap_with_versions(1, 1);
     let res1: StepRunResult = sched
-        .superstep(&mut state, &nodes, frontier.clone(), snap.clone(), 1)
+        .superstep(
+            &mut state,
+            &nodes,
+            frontier.clone(),
+            snap.clone(),
+            1,
+            event_bus.get_sender(),
+        )
         .await
         .unwrap();
     // All ran except End
@@ -147,7 +182,14 @@ async fn test_superstep_skips_end_and_nochange() {
 
     // Record_seen happened inside superstep; with same snapshot, nothing should run now.
     let res2 = sched
-        .superstep(&mut state, &nodes, frontier.clone(), snap.clone(), 2)
+        .superstep(
+            &mut state,
+            &nodes,
+            frontier.clone(),
+            snap.clone(),
+            2,
+            event_bus.get_sender(),
+        )
         .await
         .unwrap();
     assert!(res2.ran_nodes.is_empty());
@@ -161,7 +203,14 @@ async fn test_superstep_skips_end_and_nochange() {
     // Increase messages version -> A and B should run again
     let snap_bump = snap_with_versions(2, 1);
     let res3 = sched
-        .superstep(&mut state, &nodes, frontier.clone(), snap_bump, 3)
+        .superstep(
+            &mut state,
+            &nodes,
+            frontier.clone(),
+            snap_bump,
+            3,
+            event_bus.get_sender(),
+        )
         .await
         .unwrap();
     let ran3: std::collections::HashSet<_> = res3.ran_nodes.iter().cloned().collect();
@@ -193,9 +242,16 @@ async fn test_superstep_outputs_order_agnostic() {
     let snap = snap_with_versions(1, 1);
     let sched = Scheduler::new(2);
     let mut state = SchedulerState::default();
-
+    let event_bus = EventBus::default();
     let res = sched
-        .superstep(&mut state, &nodes, frontier.clone(), snap, 1)
+        .superstep(
+            &mut state,
+            &nodes,
+            frontier.clone(),
+            snap,
+            1,
+            event_bus.get_sender(),
+        )
         .await
         .unwrap();
 
@@ -237,9 +293,16 @@ async fn test_superstep_serialized_with_limit_1() {
     let snap = snap_with_versions(1, 1);
     let sched = Scheduler::new(1); // force serial execution
     let mut state = SchedulerState::default();
-
+    let event_bus = EventBus::default();
     let res = sched
-        .superstep(&mut state, &nodes, frontier.clone(), snap, 1)
+        .superstep(
+            &mut state,
+            &nodes,
+            frontier.clone(),
+            snap,
+            1,
+            event_bus.get_sender(),
+        )
         .await
         .unwrap();
 

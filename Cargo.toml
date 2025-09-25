@@ -36,6 +36,8 @@ sqlx = { version = "0.7", features = [
     "json",
 ] }
 dotenvy = "0.15"
+once_cell = "1.21.3"
+flume = "0.11.1"
 
 [features]
 default = ["sqlite-migrations"]
