@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
     match which.as_str() {
         "demo1" => run_demo1::run_demo1().await?,
         "demo2" => run_demo2::run_demo2().await?,
-        "demo3" | _ => run_demo3::run_demo3().await?,
+        _ => run_demo3::run_demo3().await?,
     }
     Ok(())
 }
