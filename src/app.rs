@@ -103,6 +103,7 @@ impl App {
         // Aggregate per-channel updates (deterministically).
         let mut msgs_all: Vec<Message> = Vec::new();
         let mut extra_all: FxHashMap<String, Value> = FxHashMap::default();
+        let mut errors_all: Vec<crate::channels::errors::ErrorEvent> = Vec::new();
 
         for (i, p) in node_partials.iter().enumerate() {
             let fallback = NodeKind::Other("?".to_string());
@@ -120,30 +121,16 @@ impl App {
             {
                 println!("  {:?} -> extra: +{} keys", nid, ex.len());
                 for (k, v) in ex {
-                    if k == "errors" {
-                        // Merge arrays for error events
-                        use serde_json::Value::Array;
-                        match (extra_all.get_mut(k), v) {
-                            (Some(Array(dst)), Array(src)) => {
-                                dst.extend(src.clone());
-                            }
-                            (None, Array(_)) => {
-                                extra_all.insert(k.clone(), v.clone());
-                            }
-                            (Some(_), Array(_)) => {
-                                // Existing non-array; replace to keep errors consistent
-                                extra_all.insert(k.clone(), v.clone());
-                            }
-                            _ => {
-                                // Non-array error key; just overwrite for now
-                                extra_all.insert(k.clone(), v.clone());
-                            }
-                        }
-                    } else {
-                        // default shallow merge behavior
-                        extra_all.insert(k.clone(), v.clone());
-                    }
+                    // default shallow merge behavior
+                    extra_all.insert(k.clone(), v.clone());
                 }
+            }
+
+            if let Some(errs) = &p.errors
+                && !errs.is_empty()
+            {
+                println!("  {:?} -> errors: +{}", nid, errs.len());
+                errors_all.extend(errs.clone());
             }
         }
 
@@ -157,6 +144,11 @@ impl App {
                 None
             } else {
                 Some(extra_all)
+            },
+            errors: if errors_all.is_empty() {
+                None
+            } else {
+                Some(errors_all)
             },
         };
 
@@ -236,6 +228,7 @@ mod tests {
                 content: "foo".into(),
             }]),
             extra: None,
+            errors: None,
         };
         let updated = app
             .apply_barrier(state, &run_ids, vec![partial])
@@ -255,6 +248,7 @@ mod tests {
         let partial = NodePartial {
             messages: None,
             extra: None,
+            errors: None,
         };
         let updated = app
             .apply_barrier(state, &run_ids, vec![partial])
@@ -278,6 +272,7 @@ mod tests {
                 content: "x".into(),
             }]),
             extra: None,
+            errors: None,
         };
         app.apply_barrier(state, &[NodeKind::Start], vec![partial])
             .await
@@ -296,6 +291,7 @@ mod tests {
                 content: "foo".into(),
             }]),
             extra: None,
+            errors: None,
         };
         let partial2 = NodePartial {
             messages: Some(vec![Message {
@@ -303,6 +299,7 @@ mod tests {
                 content: "bar".into(),
             }]),
             extra: None,
+            errors: None,
         };
         let updated = app
             .apply_barrier(
@@ -327,11 +324,13 @@ mod tests {
         let empty_msgs = NodePartial {
             messages: Some(vec![]),
             extra: None,
+            errors: None,
         };
         // Empty extra map -> Some(empty) should be treated as no-op by guard
         let empty_extra = NodePartial {
             messages: None,
             extra: Some(FxHashMap::default()),
+            errors: None,
         };
         let updated = app
             .apply_barrier(
@@ -361,10 +360,12 @@ mod tests {
         let p1 = NodePartial {
             messages: None,
             extra: Some(m1),
+            errors: None,
         };
         let p2 = NodePartial {
             messages: None,
             extra: Some(m2),
+            errors: None,
         };
 
         let updated = app

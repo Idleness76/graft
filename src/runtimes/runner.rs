@@ -325,7 +325,7 @@ impl AppRunner {
                             ErrorEvent {
                                 when: chrono::Utc::now(),
                                 scope: ErrorScope::Node {
-                                    kind: format!("{}", kind.encode()),
+                                    kind: kind.encode().to_string(),
                                     step: *step,
                                 },
                                 error: LadderError::msg(format!("{}", source)),
@@ -356,15 +356,12 @@ impl AppRunner {
                         }),
                     },
                 };
-                // Inject via barrier mechanics by applying a synthetic NodePartial with extra["errors"]
+                // Inject via barrier mechanics by applying a synthetic NodePartial with errors field
                 let mut update_state = session_state.state.clone();
                 let partial = NodePartial {
                     messages: None,
-                    extra: Some({
-                        let mut m = rustc_hash::FxHashMap::default();
-                        m.insert("errors".into(), serde_json::json!([event]));
-                        m
-                    }),
+                    extra: None,
+                    errors: Some(vec![event]),
                 };
                 // Apply directly using reducer registry through App
                 let _ = self
@@ -635,6 +632,7 @@ mod tests {
                     content: self.message.clone(),
                 }]),
                 extra: None,
+                errors: None,
             })
         }
     }
@@ -902,14 +900,26 @@ mod tests {
         let res = runner.run_step("err_sess", StepOptions::default()).await;
         assert!(res.is_err());
 
-        // Inspect session state for errors array
+        // Inspect session state for errors in the errors channel
         let sess = runner.get_session("err_sess").unwrap();
-        let extra = sess.state.extra.snapshot();
-        if let Some(val) = extra.get("errors") {
-            assert!(val.is_array());
-            assert!(!val.as_array().unwrap().is_empty());
-        } else {
-            panic!("expected errors array to be present in extra");
+        let errors_snapshot = sess.state.errors.snapshot();
+        assert!(
+            !errors_snapshot.is_empty(),
+            "expected errors to be present in errors channel"
+        );
+
+        // Verify the error contains expected information
+        let error_event = &errors_snapshot[0];
+        // The error should be from the Node scope since it's a node failure
+        assert!(matches!(
+            error_event.scope,
+            crate::channels::errors::ErrorScope::Node { .. }
+        ));
+
+        // Verify it's the failing node "X"
+        if let crate::channels::errors::ErrorScope::Node { kind, step } = &error_event.scope {
+            assert_eq!(kind, "Other:X");
+            assert_eq!(*step, 1);
         }
     }
 }

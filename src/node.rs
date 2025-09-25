@@ -1,4 +1,5 @@
 use crate::event_bus::Event;
+use crate::channels::errors::ErrorEvent;
 use crate::message::*;
 use crate::state::*;
 use async_trait::async_trait;
@@ -20,6 +21,8 @@ pub struct NodePartial {
     pub messages: Option<Vec<Message>>,
     /// Optional map of arbitrary extension data (JSON values).
     pub extra: Option<FxHashMap<String, serde_json::Value>>,
+    /// Optional list of error events to append.
+    pub errors: Option<Vec<ErrorEvent>>,
 }
 
 #[async_trait]
@@ -79,6 +82,7 @@ impl Node for NodeA {
                 content,
             }]),
             extra: Some(extra),
+            errors: None,
         })
     }
 }
@@ -107,6 +111,7 @@ impl Node for NodeB {
                 content,
             }]),
             extra: Some(extra),
+            errors: None,
         })
     }
 }

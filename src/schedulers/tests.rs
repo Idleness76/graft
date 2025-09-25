@@ -26,6 +26,7 @@ impl Node for TestNode {
                 content: format!("ran:{}:step:{}", self.name, ctx.step),
             }]),
             extra: None,
+            errors: None,
         })
     }
 }
@@ -50,6 +51,7 @@ impl Node for DelayedNode {
                 content: format!("ran:{}:step:{}", self.name, ctx.step),
             }]),
             extra: None,
+            errors: None,
         })
     }
 }
@@ -67,6 +69,7 @@ fn make_registry() -> FxHashMap<NodeKind, Arc<dyn Node>> {
     m.insert(NodeKind::End, Arc::new(TestNode { name: "END" }));
     m
 }
+
 // A node that fails immediately to test error propagation.
 struct FailingNode;
 

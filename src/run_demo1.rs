@@ -37,8 +37,8 @@ pub async fn run_demo1() -> Result<()> {
         .add_edge(NodeKind::Other("A".into()), NodeKind::Other("B".into()))
         .add_edge(NodeKind::Other("B".into()), NodeKind::End)
         .set_entry(NodeKind::Start)
-    .compile()
-    .map_err(|e| miette::miette!("{e:?}"))?;
+        .compile()
+        .map_err(|e| miette::miette!("{e:?}"))?;
 
     // 3. Invoke full app run
     let final_state = app.invoke(init).await?;
@@ -93,6 +93,7 @@ pub async fn run_demo1() -> Result<()> {
                 content: "manual msg 1".into(),
             }]),
             extra: Some(extra1),
+            errors: None,
         },
         NodePartial {
             messages: Some(vec![Message {
@@ -100,6 +101,7 @@ pub async fn run_demo1() -> Result<()> {
                 content: "manual msg 2".into(),
             }]),
             extra: Some(extra2),
+            errors: None,
         },
     ];
 
@@ -126,10 +128,12 @@ pub async fn run_demo1() -> Result<()> {
         NodePartial {
             messages: Some(vec![]),
             extra: None,
+            errors: None,
         },
         NodePartial {
             messages: None,
             extra: Some(FxHashMap::default()),
+            errors: None,
         },
     ];
     let updated2 = app
@@ -148,6 +152,7 @@ pub async fn run_demo1() -> Result<()> {
             content: "won't bump ver".into(),
         }]),
         extra: None,
+        errors: None,
     };
     let _ = app
         .apply_barrier(&mut manual_state, &[], vec![saturated])

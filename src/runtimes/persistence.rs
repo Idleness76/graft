@@ -67,6 +67,7 @@ impl<V> Default for PersistedMapChannel<V> {
 pub struct PersistedState {
     pub messages: PersistedVecChannel<Message>,
     pub extra: PersistedMapChannel<Value>,
+    pub errors: PersistedVecChannel<crate::channels::errors::ErrorEvent>,
 }
 
 /// Wrapper for the scheduler versions_seen structure.
@@ -131,6 +132,10 @@ impl From<&VersionedState> for PersistedState {
                 version: s.extra.version(),
                 map: s.extra.snapshot(),
             },
+            errors: PersistedVecChannel {
+                version: s.errors.version(),
+                items: s.errors.snapshot(),
+            },
         }
     }
 }
@@ -142,7 +147,7 @@ impl TryFrom<PersistedState> for VersionedState {
         Ok(VersionedState {
             messages: MessagesChannel::new(p.messages.items, p.messages.version),
             extra: ExtrasChannel::new(p.extra.map, p.extra.version),
-            errors: crate::channels::ErrorsChannel::default(),
+            errors: crate::channels::ErrorsChannel::new(p.errors.items, p.errors.version),
         })
     }
 }

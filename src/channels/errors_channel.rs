@@ -1,7 +1,8 @@
-use super::errors::ErrorEvent;
 use super::Channel;
+use super::errors::ErrorEvent;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ErrorsChannel {
     value: Vec<ErrorEvent>,
     version: u32,
@@ -9,13 +10,19 @@ pub struct ErrorsChannel {
 
 impl ErrorsChannel {
     pub fn new(events: Vec<ErrorEvent>, version: u32) -> Self {
-        Self { value: events, version }
+        Self {
+            value: events,
+            version,
+        }
     }
 }
 
 impl Default for ErrorsChannel {
     fn default() -> Self {
-        Self { value: Vec::new(), version: 1 }
+        Self {
+            value: Vec::new(),
+            version: 1,
+        }
     }
 }
 
