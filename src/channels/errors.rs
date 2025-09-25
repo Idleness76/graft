@@ -20,9 +20,17 @@ pub struct ErrorEvent {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(tag = "scope", rename_all = "snake_case")]
 pub enum ErrorScope {
-    Node { kind: String, step: u64 },
-    Scheduler { step: u64 },
-    Runner { session: String, step: u64 },
+    Node {
+        kind: String,
+        step: u64,
+    },
+    Scheduler {
+        step: u64,
+    },
+    Runner {
+        session: String,
+        step: u64,
+    },
     #[default]
     App,
 }

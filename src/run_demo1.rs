@@ -37,8 +37,8 @@ pub async fn run_demo1() -> Result<()> {
         .add_edge(NodeKind::Other("A".into()), NodeKind::Other("B".into()))
         .add_edge(NodeKind::Other("B".into()), NodeKind::End)
         .set_entry(NodeKind::Start)
-    .compile()
-    .map_err(|e| miette::miette!("{e:?}"))?;
+        .compile()
+        .map_err(|e| miette::miette!("{e:?}"))?;
 
     // 3. Invoke full app run
     let final_state = app.invoke(init).await?;

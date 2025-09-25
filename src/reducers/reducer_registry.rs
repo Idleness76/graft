@@ -2,7 +2,7 @@ use rustc_hash::FxHashMap;
 
 use crate::{
     node::NodePartial,
-    reducers::{AddMessages, AddErrors, MapMerge, Reducer, ReducerError},
+    reducers::{AddErrors, AddMessages, MapMerge, Reducer, ReducerError},
     state::VersionedState,
     types::ChannelType,
 };
