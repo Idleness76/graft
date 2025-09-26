@@ -3,7 +3,8 @@ use super::node::{Node, NodeContext, NodeError, NodePartial};
 use super::state::{StateSnapshot, VersionedState};
 use super::types::NodeKind;
 use crate::channels::Channel;
-use crate::channels::errors::pretty_print;
+use crate::channels::errors::{ErrorEvent, ErrorScope, LadderError, pretty_print};
+use crate::event_bus::Event;
 use crate::message::*;
 use crate::runtimes::{CheckpointerType, RuntimeConfig};
 use async_trait::async_trait;
@@ -11,7 +12,7 @@ use futures::StreamExt;
 use miette::Result;
 use rig::client::CompletionClient;
 use rig::completion::{CompletionModel, GetTokenUsage};
-use rig::prelude::*;
+
 use rig::providers::ollama;
 use tracing::instrument;
 
@@ -85,13 +86,68 @@ impl Node for NodeA {
             }
         }
 
+        // Create some example errors based on the response
+        let mut errors = Vec::new();
+
+        // Example 1: Check if response is very short (could indicate an issue)
+        if model_response.len() < 50 {
+            errors.push(ErrorEvent {
+                when: chrono::Utc::now(),
+                scope: ErrorScope::Node {
+                    kind: "A".to_string(),
+                    step: ctx.step,
+                },
+                error: LadderError {
+                    message: "Generated response is suspiciously short".to_string(),
+                    cause: None,
+                    details: serde_json::json!({
+                        "response_length": model_response.len(),
+                        "chunk_count": chunk_count
+                    }),
+                },
+                tags: vec!["quality_check".to_string(), "short_response".to_string()],
+                context: serde_json::json!({
+                    "node_type": "LLM",
+                    "model": "gemma3"
+                }),
+            });
+        }
+
+        // Example 2: Warning if we had very few chunks (potential streaming issue)
+        if chunk_count < 3 {
+            errors.push(ErrorEvent {
+                when: chrono::Utc::now(),
+                scope: ErrorScope::Node {
+                    kind: "A".to_string(),
+                    step: ctx.step,
+                },
+                error: LadderError {
+                    message: format!("Low chunk count in streaming response: {}", chunk_count),
+                    cause: None,
+                    details: serde_json::json!({
+                        "chunk_count": chunk_count,
+                        "expected_min": 3
+                    }),
+                },
+                tags: vec!["streaming_warning".to_string()],
+                context: serde_json::json!({
+                    "node_type": "LLM",
+                    "model": "gemma3"
+                }),
+            });
+        }
+
         Ok(NodePartial {
             messages: Some(vec![Message {
                 content: model_response,
                 role: "assistant".to_owned(),
             }]),
             extra: None,
-            errors: None,
+            errors: if errors.is_empty() {
+                None
+            } else {
+                Some(errors)
+            },
         })
     }
 }
@@ -159,13 +215,46 @@ impl Node for NodeB {
             }
         }
 
+        // Add a different type of error for NodeB
+        let mut errors = Vec::new();
+
+        // Check if the previous message looks incomplete (missing punctuation)
+        let prev_msg = snapshot.messages.last().unwrap();
+        if !prev_msg.content.trim_end().ends_with(&['.', '!', '?'][..]) {
+            errors.push(ErrorEvent {
+                when: chrono::Utc::now(),
+                scope: ErrorScope::Node {
+                    kind: "B".to_string(),
+                    step: ctx.step,
+                },
+                error: LadderError {
+                    message: "Input message appears incomplete (no ending punctuation)".to_string(),
+                    cause: None,
+                    details: serde_json::json!({
+                        "input_message_length": prev_msg.content.len(),
+                        "last_chars": prev_msg.content.chars().rev().take(10).collect::<String>()
+                    }),
+                },
+                tags: vec!["input_quality".to_string()],
+                context: serde_json::json!({
+                    "node_type": "LLM",
+                    "model": "gemma3",
+                    "operation": "expansion"
+                }),
+            });
+        }
+
         Ok(NodePartial {
             messages: Some(vec![Message {
                 content: model_response,
                 role: "assistant".to_owned(),
             }]),
             extra: None,
-            errors: None,
+            errors: if errors.is_empty() {
+                None
+            } else {
+                Some(errors)
+            },
         })
     }
 }
