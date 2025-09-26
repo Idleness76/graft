@@ -185,27 +185,53 @@ impl AppRunner {
         checkpointer_type: CheckpointerType,
         autosave: bool,
     ) -> Self {
-        let sqlite_db_name = app.runtime_config().sqlite_db_name.clone();
-        let checkpointer = Self::create_checkpointer(checkpointer_type, sqlite_db_name).await;
-        let event_bus = EventBus::default();
-        event_bus.listen_for_events();
-        Self {
-            app: Arc::new(app),
-            sessions: FxHashMap::default(),
-            checkpointer,
-            autosave,
-            event_bus,
-        }
+        let app = Arc::new(app);
+        Self::with_arc_and_bus(app, checkpointer_type, autosave, EventBus::default(), true).await
     }
+
     pub async fn with_options_arc(
         app: Arc<App>,
         checkpointer_type: CheckpointerType,
         autosave: bool,
     ) -> Self {
+        Self::with_arc_and_bus(app, checkpointer_type, autosave, EventBus::default(), true).await
+    }
+
+    /// Variant that accepts a preconfigured EventBus.
+    pub async fn with_options_and_bus(
+        app: App,
+        checkpointer_type: CheckpointerType,
+        autosave: bool,
+        event_bus: EventBus,
+        start_listener: bool,
+    ) -> Self {
+        let app = Arc::new(app);
+        Self::with_arc_and_bus(app, checkpointer_type, autosave, event_bus, start_listener).await
+    }
+
+    /// Variant that accepts a preconfigured EventBus for an existing Arc<App>.
+    pub async fn with_options_arc_and_bus(
+        app: Arc<App>,
+        checkpointer_type: CheckpointerType,
+        autosave: bool,
+        event_bus: EventBus,
+        start_listener: bool,
+    ) -> Self {
+        Self::with_arc_and_bus(app, checkpointer_type, autosave, event_bus, start_listener).await
+    }
+
+    async fn with_arc_and_bus(
+        app: Arc<App>,
+        checkpointer_type: CheckpointerType,
+        autosave: bool,
+        event_bus: EventBus,
+        start_listener: bool,
+    ) -> Self {
         let sqlite_db_name = app.runtime_config().sqlite_db_name.clone();
         let checkpointer = Self::create_checkpointer(checkpointer_type, sqlite_db_name).await;
-        let event_bus = EventBus::default();
-        event_bus.listen_for_events();
+        if start_listener {
+            event_bus.listen_for_events();
+        }
         Self {
             app,
             sessions: FxHashMap::default(),

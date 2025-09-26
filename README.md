@@ -72,6 +72,13 @@ Tracing and logs:
 RUST_LOG=debug cargo run -- demo2
 ```
 
+## Event bus streaming
+
+- `AppRunner` wires an event bus that streams node/lifecycle messages to stdout; `listen_for_events()` spins the default listener.
+- To plug in custom sinks (e.g., telemetry dashboards), construct an `EventBus`, configure listeners yourself, and pass it into `AppRunner::with_options_and_bus` (or the `*_arc` variant). Set `start_listener = false` if you want to manage listener tasks manually.
+- Use helpers like `EventBus::with_sink(MemorySink::new())` for test harnesses or `EventBus::with_sink_and_formatter` to pair a custom sink with a formatter; the default `StdOutSink` flushes each line for responsive streaming.
+- Call `EventBus::stop_listener().await` when shutting down long-lived services to flush outstanding messages and end the background task cleanly.
+
 ## Error handling and diagnostics
 
 - Nodes return `Result<NodePartial, NodeError>`

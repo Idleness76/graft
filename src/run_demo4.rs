@@ -32,12 +32,11 @@ impl Node for NodeA {
             what: "user_prompt",
         })?;
 
-        ctx.event_bus_sender
-            .send(Event {
-                context: "Node A pre model call".to_owned(),
-                message: format!("initial prompt is: {}", user_prompt.content),
-            })
-            .unwrap();
+        ctx.emit(
+            "Node A pre model call",
+            format!("initial prompt is: {}", user_prompt.content),
+        )
+        .unwrap();
         let client = ollama::Client::new();
         let completion_model = client.completion_model("gemma3");
 
@@ -61,28 +60,15 @@ impl Node for NodeA {
             match chunk_result {
                 Ok(content) => match content {
                     rig::streaming::StreamedAssistantContent::Text(text) => {
-                        ctx.event_bus_sender
-                            .send(Event {
-                                context: "Node A LLM stream".to_owned(),
-                                message: text.to_string(),
-                            })
-                            .unwrap();
+                        ctx.emit("Node A LLM stream", text.to_string()).unwrap();
                         model_response += text.text();
                         chunk_count += 1;
                     }
                     rig::streaming::StreamedAssistantContent::Final(response) => {
-                        ctx.event_bus_sender
-                            .send(Event {
-                                context: "Node A LLM stream".to_owned(),
-                                message: "Node A stream complete".to_owned(),
-                            })
+                        ctx.emit("Node A LLM stream", "Node A stream complete".to_owned())
                             .unwrap();
                         if let Some(usage) = response.token_usage() {
-                            ctx.event_bus_sender
-                                .send(Event {
-                                    context: "Node A LLM stream".to_owned(),
-                                    message: format!("Token usage: {:?}", usage),
-                                })
+                            ctx.emit("Node A LLM stream", format!("Token usage: {:?}", usage))
                                 .unwrap();
                         }
                         break;
@@ -203,28 +189,15 @@ impl Node for NodeB {
             match chunk_result {
                 Ok(content) => match content {
                     rig::streaming::StreamedAssistantContent::Text(text) => {
-                        ctx.event_bus_sender
-                            .send(Event {
-                                context: "Node B LLM stream".to_owned(),
-                                message: text.to_string(),
-                            })
-                            .unwrap();
+                        ctx.emit("Node B LLM stream", text.to_string()).unwrap();
                         model_response += text.text();
                         chunk_count += 1;
                     }
                     rig::streaming::StreamedAssistantContent::Final(response) => {
-                        ctx.event_bus_sender
-                            .send(Event {
-                                context: "Node B LLM stream".to_owned(),
-                                message: "Node B stream complete".to_owned(),
-                            })
+                        ctx.emit("Node B LLM stream", "Node B stream complete".to_owned())
                             .unwrap();
                         if let Some(usage) = response.token_usage() {
-                            ctx.event_bus_sender
-                                .send(Event {
-                                    context: "Node B LLM stream".to_owned(),
-                                    message: format!("Token usage: {:?}", usage),
-                                })
+                            ctx.emit("Node B LLM stream", format!("Token usage: {:?}", usage))
                                 .unwrap();
                         }
                         break;
@@ -308,7 +281,7 @@ pub async fn run_demo4() -> Result<()> {
         .add_edge(NodeKind::Other("B".into()), NodeKind::End)
         .set_entry(NodeKind::Start)
         .with_runtime_config(RuntimeConfig {
-            session_id: Some("salads_03".into()),
+            session_id: Some("salads_05".into()),
             checkpointer: Some(CheckpointerType::SQLite),
             sqlite_db_name: None,
         })

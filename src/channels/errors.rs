@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::telemetry::{PlainFormatter, TelemetryFormatter};
+
 // Avoid depending on serde for NodeKind by using encoded string form for kind.
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -87,19 +89,15 @@ impl LadderError {
 }
 
 pub fn pretty_print(events: &[ErrorEvent]) -> String {
-    use std::fmt::Write as _;
+    let formatter = PlainFormatter::default();
+    let renders = formatter.render_errors(events);
     let mut out = String::new();
-    for (i, e) in events.iter().enumerate() {
-        let _ = writeln!(out, "[{}] {} | {:?}", i, e.when, e.scope);
-        let _ = writeln!(out, "  error: {}", e.error.message);
-        if let Some(cause) = &e.error.cause {
-            let _ = writeln!(out, "  cause: {}", cause.message);
+    for (idx, render) in renders.into_iter().enumerate() {
+        if idx > 0 {
+            out.push('\n');
         }
-        if !e.tags.is_empty() {
-            let _ = writeln!(out, "  tags: {:?}", e.tags);
-        }
-        if !e.context.is_null() {
-            let _ = writeln!(out, "  context: {}", e.context);
+        for line in render.lines {
+            out.push_str(&line);
         }
     }
     out

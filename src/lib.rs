@@ -12,6 +12,7 @@ pub mod run_demo4;
 pub mod runtimes;
 pub mod schedulers;
 pub mod state;
+pub mod telemetry;
 pub mod types;
 pub mod utils;
 
