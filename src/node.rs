@@ -1,3 +1,4 @@
+use crate::event_bus::Event;
 use crate::channels::errors::ErrorEvent;
 use crate::message::*;
 use crate::state::*;
@@ -11,6 +12,7 @@ use thiserror::Error;
 pub struct NodeContext {
     pub node_id: String,
     pub step: u64,
+    pub event_bus_sender: flume::Sender<Event>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -116,12 +118,17 @@ impl Node for NodeB {
 
 #[cfg(test)]
 mod tests {
+    use crate::event_bus::EventBus;
+
     use super::*;
 
     fn make_ctx(step: u64) -> NodeContext {
+        let event_bus = EventBus::default();
+
         NodeContext {
             node_id: "n1".to_string(),
             step,
+            event_bus_sender: event_bus.get_sender(),
         }
     }
 

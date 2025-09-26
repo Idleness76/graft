@@ -5,6 +5,7 @@ use super::checkpointer::{Checkpoint, Checkpointer, CheckpointerError, restore_s
 use crate::app::App;
 use crate::channels::Channel;
 use crate::channels::errors::{ErrorEvent, ErrorScope, LadderError};
+use crate::event_bus::EventBus;
 use crate::node::NodePartial;
 use crate::runtimes::{CheckpointerType, InMemoryCheckpointer};
 use crate::schedulers::{Scheduler, SchedulerError, SchedulerState};
@@ -79,6 +80,7 @@ pub struct AppRunner {
     sessions: FxHashMap<String, SessionState>,
     checkpointer: Option<Arc<dyn Checkpointer>>, // optional pluggable persistence
     autosave: bool,
+    event_bus: EventBus,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -185,11 +187,14 @@ impl AppRunner {
     ) -> Self {
         let sqlite_db_name = app.runtime_config().sqlite_db_name.clone();
         let checkpointer = Self::create_checkpointer(checkpointer_type, sqlite_db_name).await;
+        let event_bus = EventBus::default();
+        event_bus.listen_for_events();
         Self {
             app: Arc::new(app),
             sessions: FxHashMap::default(),
             checkpointer,
             autosave,
+            event_bus,
         }
     }
     pub async fn with_options_arc(
@@ -199,11 +204,14 @@ impl AppRunner {
     ) -> Self {
         let sqlite_db_name = app.runtime_config().sqlite_db_name.clone();
         let checkpointer = Self::create_checkpointer(checkpointer_type, sqlite_db_name).await;
+        let event_bus = EventBus::default();
+        event_bus.listen_for_events();
         Self {
             app,
             sessions: FxHashMap::default(),
             checkpointer,
             autosave,
+            event_bus,
         }
     }
 
@@ -437,6 +445,7 @@ impl AppRunner {
                 session_state.frontier.clone(),
                 snapshot.clone(),
                 step,
+                self.event_bus.get_sender(),
             )
             .await?;
 
