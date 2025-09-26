@@ -1,5 +1,5 @@
-use crate::event_bus::Event;
 use crate::channels::errors::ErrorEvent;
+use crate::event_bus::Event;
 use crate::message::*;
 use crate::state::*;
 use async_trait::async_trait;
@@ -13,6 +13,32 @@ pub struct NodeContext {
     pub node_id: String,
     pub step: u64,
     pub event_bus_sender: flume::Sender<Event>,
+}
+
+impl NodeContext {
+    /// Emit a node-scoped event enriched with this context's metadata.
+    pub fn emit(
+        &self,
+        scope: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Result<(), flume::SendError<Event>> {
+        self.event_bus_sender.send(Event::node_message_with_meta(
+            self.node_id.clone(),
+            self.step,
+            scope,
+            message,
+        ))
+    }
+
+    /// Emit a diagnostic event that is not tied to node metadata.
+    pub fn emit_diagnostic(
+        &self,
+        scope: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Result<(), flume::SendError<Event>> {
+        self.event_bus_sender
+            .send(Event::diagnostic(scope.into(), message.into()))
+    }
 }
 
 #[derive(Clone, Debug, Default)]

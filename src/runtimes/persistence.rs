@@ -67,6 +67,7 @@ impl<V> Default for PersistedMapChannel<V> {
 pub struct PersistedState {
     pub messages: PersistedVecChannel<Message>,
     pub extra: PersistedMapChannel<Value>,
+    #[serde(default)]
     pub errors: PersistedVecChannel<crate::channels::errors::ErrorEvent>,
 }
 
@@ -247,6 +248,17 @@ mod tests {
         assert_eq!(vs.extra.snapshot(), vs2.extra.snapshot());
         assert_eq!(vs.messages.version(), vs2.messages.version());
         assert_eq!(vs.extra.version(), vs2.extra.version());
+    }
+
+    #[test]
+    fn test_state_deserialize_without_errors_channel() {
+        let json = r#"{
+            "messages": {"version": 1, "items": []},
+            "extra": {"version": 1, "map": {}}
+        }"#;
+        let persisted: PersistedState = serde_json::from_str(json).unwrap();
+        assert_eq!(persisted.errors.version, 1);
+        assert!(persisted.errors.items.is_empty());
     }
 
     #[test]

@@ -5,7 +5,6 @@ use super::state::{StateSnapshot, VersionedState};
 use super::types::NodeKind;
 use crate::channels::Channel;
 use crate::channels::errors::pretty_print;
-use crate::event_bus::Event;
 use crate::message::*;
 use crate::runtimes::{CheckpointerType, RuntimeConfig};
 use async_trait::async_trait;
@@ -94,15 +93,14 @@ impl Node for NodeB {
         let client = ollama::Client::new();
         let completion_model = client.completion_model("gemma3");
 
-        ctx.event_bus_sender
-            .send(Event {
-                context: "Node B".to_owned(),
-                message: format!(
-                    "first joke run is: {}, number of cat iterations is {}",
-                    joke_response.content, cat_iterations
-                ),
-            })
-            .unwrap();
+        ctx.emit(
+            "Node B",
+            format!(
+                "first joke run is: {}, number of cat iterations is {}",
+                joke_response.content, cat_iterations
+            ),
+        )
+        .unwrap();
 
         let completion_request = completion_model
             .completion_request(rig::completion::Message::user(format!(
