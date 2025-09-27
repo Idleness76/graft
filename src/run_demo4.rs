@@ -4,7 +4,6 @@ use super::state::{StateSnapshot, VersionedState};
 use super::types::NodeKind;
 use crate::channels::Channel;
 use crate::channels::errors::{ErrorEvent, ErrorScope, LadderError, pretty_print};
-use crate::event_bus::Event;
 use crate::message::*;
 use crate::runtimes::{CheckpointerType, RuntimeConfig};
 use async_trait::async_trait;
@@ -215,7 +214,7 @@ impl Node for NodeB {
             }
         }
 
-        // Add a different type of error for NodeB
+        // Add multiple types of errors for NodeB
         let mut errors = Vec::new();
 
         // Check if the previous message looks incomplete (missing punctuation)
@@ -236,6 +235,62 @@ impl Node for NodeB {
                     }),
                 },
                 tags: vec!["input_quality".to_string()],
+                context: serde_json::json!({
+                    "node_type": "LLM",
+                    "model": "gemma3",
+                    "operation": "expansion"
+                }),
+            });
+        }
+
+        // Check for streaming issues during expansion (should have more chunks since it's generating more content)
+        if chunk_count < 5 {
+            errors.push(ErrorEvent {
+                when: chrono::Utc::now(),
+                scope: ErrorScope::Node {
+                    kind: "B".to_string(),
+                    step: ctx.step,
+                },
+                error: LadderError {
+                    message: format!("Low chunk count for expansion task: {}", chunk_count),
+                    cause: None,
+                    details: serde_json::json!({
+                        "chunk_count": chunk_count,
+                        "expected_min_for_expansion": 5,
+                        "task": "add 3 paragraphs"
+                    }),
+                },
+                tags: vec![
+                    "streaming_warning".to_string(),
+                    "expansion_task".to_string(),
+                ],
+                context: serde_json::json!({
+                    "node_type": "LLM",
+                    "model": "gemma3",
+                    "operation": "expansion"
+                }),
+            });
+        }
+
+        // Check if expansion actually produced more content than input
+        if (model_response.len() as f64) <= (prev_msg.content.len() as f64 * 1.2) {
+            errors.push(ErrorEvent {
+                when: chrono::Utc::now(),
+                scope: ErrorScope::Node {
+                    kind: "B".to_string(),
+                    step: ctx.step,
+                },
+                error: LadderError {
+                    message: "Expansion task may not have added sufficient content".to_string(),
+                    cause: None,
+                    details: serde_json::json!({
+                        "input_length": prev_msg.content.len(),
+                        "output_length": model_response.len(),
+                        "expansion_ratio": model_response.len() as f64 / prev_msg.content.len() as f64,
+                        "chunk_count": chunk_count
+                    }),
+                },
+                tags: vec!["content_quality".to_string(), "expansion_task".to_string()],
                 context: serde_json::json!({
                     "node_type": "LLM",
                     "model": "gemma3",

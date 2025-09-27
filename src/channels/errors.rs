@@ -89,7 +89,7 @@ impl LadderError {
 }
 
 pub fn pretty_print(events: &[ErrorEvent]) -> String {
-    let formatter = PlainFormatter::default();
+    let formatter = PlainFormatter;
     let renders = formatter.render_errors(events);
     let mut out = String::new();
     for (idx, render) in renders.into_iter().enumerate() {

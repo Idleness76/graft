@@ -26,7 +26,7 @@ impl EventBus {
     where
         T: EventSink + 'static,
     {
-        Self::with_sink_and_formatter(sink, PlainFormatter::default())
+        Self::with_sink_and_formatter(sink, PlainFormatter)
     }
 
     pub fn with_sink_and_formatter<T, F>(sink: T, formatter: F) -> Self
@@ -91,8 +91,7 @@ impl EventBus {
                             if let Err(e) = output
                                 .lock()
                                 .map_err(|poisoned| {
-                                    std::io::Error::new(
-                                        std::io::ErrorKind::Other,
+                                    std::io::Error::other(
                                         format!("poisoned mutex: {poisoned}"),
                                     )
                                 })
@@ -127,11 +126,11 @@ impl EventBus {
 
 impl Drop for EventBus {
     fn drop(&mut self) {
-        if let Ok(mut guard) = self.listener.lock() {
-            if let Some(state) = guard.take() {
-                let _ = state.shutdown_tx.send(());
-                state.handle.abort();
-            }
+        if let Ok(mut guard) = self.listener.lock()
+            && let Some(state) = guard.take()
+        {
+            let _ = state.shutdown_tx.send(());
+            state.handle.abort();
         }
     }
 }
