@@ -28,7 +28,7 @@ pub struct PlainFormatter;
 
 impl TelemetryFormatter for PlainFormatter {
     fn render_event(&self, event: &Event) -> EventRender {
-        let line = format!("{LINE_COLOR}{}{RESET_COLOR}\n", event.to_string());
+        let line = format!("{LINE_COLOR}{}{RESET_COLOR}\n", event);
         EventRender {
             context: event.scope_label().map(|s| s.to_string()),
             lines: vec![line],

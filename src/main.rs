@@ -42,7 +42,8 @@ async fn main() -> Result<()> {
         "demo1" => run_demo1::run_demo1().await?,
         "demo2" => run_demo2::run_demo2().await?,
         "demo3" => run_demo3::run_demo3().await?,
-        "demo4" | _ => run_demo4::run_demo4().await?,
+        "demo4" => run_demo4::run_demo4().await?,
+        _ => println!("invalid demo, try again"),
     }
     Ok(())
 }
