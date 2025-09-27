@@ -9,10 +9,18 @@ use crate::runtimes::{CheckpointerType, RuntimeConfig};
 use async_trait::async_trait;
 use futures::StreamExt;
 use miette::Result;
+use rig::agent::MultiTurnStreamItem;
 use rig::client::CompletionClient;
 use rig::completion::{CompletionModel, GetTokenUsage};
-
-use rig::providers::ollama;
+use rig::message::{Message as RigMessage, Reasoning, Text};
+use rig::prelude::*;
+use rig::providers::gemini::completion::gemini_api_types::{
+    AdditionalParameters, GenerationConfig, ThinkingConfig,
+};
+use rig::{
+    providers::gemini::{self},
+    streaming::{StreamedAssistantContent, StreamingPrompt},
+};
 use tracing::instrument;
 
 struct NodeA;
@@ -36,52 +44,52 @@ impl Node for NodeA {
             format!("initial prompt is: {}", user_prompt.content),
         )
         .unwrap();
-        let client = ollama::Client::new();
-        let completion_model = client.completion_model("gemma3");
-
-        let completion_request = completion_model
-            .completion_request(user_prompt.content.clone())
-            .preamble("You are a senior rust developer AI Assistant".to_owned())
+        let gen_cfg = GenerationConfig {
+            thinking_config: Some(ThinkingConfig {
+                include_thoughts: Some(true),
+                thinking_budget: 2048,
+            }),
+            ..Default::default()
+        };
+        let cfg = AdditionalParameters::default().with_config(gen_cfg);
+        // Create streaming agent with a single context prompt
+        let agent = gemini::Client::from_env()
+            .agent("gemini-2.5-flash")
+            .preamble("You are a senior rust developer AI Assistant.")
             .temperature(0.9)
+            .additional_params(serde_json::to_value(cfg).unwrap())
             .build();
 
-        let mut stream = completion_model
-            .stream(completion_request)
-            .await
-            .map_err(|e| NodeError::Provider {
-                provider: "ollama",
-                message: e.to_string(),
-            })?;
+        // Stream the response and print chunks as they arrive
+        let mut stream = agent.stream_prompt(user_prompt.content.clone()).await;
 
         let mut chunk_count = 0;
         let mut model_response = String::new();
-        while let Some(chunk_result) = stream.next().await {
-            match chunk_result {
-                Ok(content) => match content {
-                    rig::streaming::StreamedAssistantContent::Text(text) => {
-                        ctx.emit("Node A LLM stream", text.to_string()).unwrap();
-                        model_response += text.text();
-                        chunk_count += 1;
-                    }
-                    rig::streaming::StreamedAssistantContent::Final(response) => {
-                        ctx.emit("Node A LLM stream", "Node A stream complete".to_owned())
-                            .unwrap();
-                        if let Some(usage) = response.token_usage() {
-                            ctx.emit("Node A LLM stream", format!("Token usage: {:?}", usage))
-                                .unwrap();
-                        }
-                        break;
-                    }
-                    _ => {}
-                },
-                Err(e) => {
-                    if e.to_string().contains("aborted") {
-                        println!("\n[Stream cancelled]");
-                        break;
-                    }
-                    eprintln!("Error: {}", e);
-                    break;
+        while let Some(content) = stream.next().await {
+            match content {
+                Ok(MultiTurnStreamItem::StreamItem(StreamedAssistantContent::Text(Text {
+                    text,
+                }))) => {
+                    model_response += &text;
+                    ctx.emit("Node A LLM stream", text).unwrap();
+                    chunk_count += 1;
                 }
+                Ok(MultiTurnStreamItem::StreamItem(StreamedAssistantContent::Reasoning(
+                    Reasoning { reasoning, .. },
+                ))) => {
+                    let reasoning = reasoning.join("\n");
+                    ctx.emit("Node A LLM Reasoning", reasoning).unwrap();
+                    chunk_count += 1;
+                }
+                Ok(MultiTurnStreamItem::FinalResponse(res)) => {
+                    ctx.emit("Node A LLM stream", res.response()).unwrap();
+                    model_response += res.response();
+                    chunk_count += 1;
+                }
+                Err(err) => {
+                    eprintln!("Error: {err}");
+                }
+                _ => {}
             }
         }
 
@@ -135,6 +143,11 @@ impl Node for NodeA {
                 }),
             });
         }
+        ctx.emit(
+            "Node A post model call",
+            format!("total chunks for this stage: {}", chunk_count),
+        )
+        .unwrap();
 
         Ok(NodePartial {
             messages: Some(vec![Message {
@@ -162,55 +175,62 @@ impl Node for NodeB {
         ctx: NodeContext,
     ) -> Result<NodePartial, NodeError> {
         let model_response = snapshot.messages.last().unwrap();
-        let client = ollama::Client::new();
-        let completion_model = client.completion_model("gemma3");
 
-        let completion_request = completion_model
-            .completion_request(rig::completion::Message::user(format!(
-                "here's my essay about rust lifetimes: {}. \n    add 3 more paragraphs about the borrow checker and best practices for using it",
-                model_response.content.clone()
-            )))
-            .preamble("you are a senior Rust developer AI assistant".to_owned())
+        ctx.emit(
+            "Node B pre model call",
+            format!("last model response is: {}", model_response.content),
+        )
+        .unwrap();
+
+        let gen_cfg = GenerationConfig {
+            thinking_config: Some(ThinkingConfig {
+                include_thoughts: Some(true),
+                thinking_budget: 2048,
+            }),
+            ..Default::default()
+        };
+        let cfg = AdditionalParameters::default().with_config(gen_cfg);
+        // Create streaming agent with a single context prompt
+        let agent = gemini::Client::from_env()
+            .agent("gemini-2.5-flash")
+            .preamble("You are a senior rust developer AI Assistant.")
             .temperature(0.9)
+            .additional_params(serde_json::to_value(cfg).unwrap())
             .build();
 
-        let mut stream = completion_model
-            .stream(completion_request)
-            .await
-            .map_err(|e| NodeError::Provider {
-                provider: "ollama",
-                message: e.to_string(),
-            })?;
+        // Stream the response and print chunks as they arrive
+        let mut stream = agent.stream_prompt(rig::completion::Message::user(format!(
+            "here's my essay about rust lifetimes: {}. \n    add 3 more paragraphs about the borrow checker and best practices for using it",
+            model_response.content.clone()
+        ))).await;
 
         let mut chunk_count = 0;
         let mut model_response = String::new();
-        while let Some(chunk_result) = stream.next().await {
-            match chunk_result {
-                Ok(content) => match content {
-                    rig::streaming::StreamedAssistantContent::Text(text) => {
-                        ctx.emit("Node B LLM stream", text.to_string()).unwrap();
-                        model_response += text.text();
-                        chunk_count += 1;
-                    }
-                    rig::streaming::StreamedAssistantContent::Final(response) => {
-                        ctx.emit("Node B LLM stream", "Node B stream complete".to_owned())
-                            .unwrap();
-                        if let Some(usage) = response.token_usage() {
-                            ctx.emit("Node B LLM stream", format!("Token usage: {:?}", usage))
-                                .unwrap();
-                        }
-                        break;
-                    }
-                    _ => {}
-                },
-                Err(e) => {
-                    if e.to_string().contains("aborted") {
-                        println!("\n[Stream cancelled]");
-                        break;
-                    }
-                    eprintln!("Error: {}", e);
-                    break;
+        while let Some(content) = stream.next().await {
+            match content {
+                Ok(MultiTurnStreamItem::StreamItem(StreamedAssistantContent::Text(Text {
+                    text,
+                }))) => {
+                    model_response += &text;
+                    ctx.emit("Node B LLM stream", text).unwrap();
+                    chunk_count += 1;
                 }
+                Ok(MultiTurnStreamItem::StreamItem(StreamedAssistantContent::Reasoning(
+                    Reasoning { reasoning, .. },
+                ))) => {
+                    let reasoning = reasoning.join("\n");
+                    ctx.emit("Node B LLM Reasoning", reasoning).unwrap();
+                    chunk_count += 1;
+                }
+                Ok(MultiTurnStreamItem::FinalResponse(res)) => {
+                    ctx.emit("Node B LLM stream", res.response()).unwrap();
+                    model_response += res.response();
+                    chunk_count += 1;
+                }
+                Err(err) => {
+                    eprintln!("Error: {err}");
+                }
+                _ => {}
             }
         }
 
@@ -298,6 +318,11 @@ impl Node for NodeB {
                 }),
             });
         }
+        ctx.emit(
+            "Node B post model call",
+            format!("total chunks for this stage: {}", chunk_count),
+        )
+        .unwrap();
 
         Ok(NodePartial {
             messages: Some(vec![Message {
@@ -336,7 +361,7 @@ pub async fn run_demo4() -> Result<()> {
         .add_edge(NodeKind::Other("B".into()), NodeKind::End)
         .set_entry(NodeKind::Start)
         .with_runtime_config(RuntimeConfig {
-            session_id: Some("salads_05".into()),
+            session_id: Some("streaming_1".into()),
             checkpointer: Some(CheckpointerType::SQLite),
             sqlite_db_name: None,
         })
