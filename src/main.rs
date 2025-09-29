@@ -1,8 +1,9 @@
-use graft::{run_demo1, run_demo2, run_demo3, run_demo4};
+// Demo modules are currently commented out
+// use graft::{run_demo1, run_demo2, run_demo3, run_demo4};
 use miette::Result;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::fmt::format::FmtSpan;
-use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 fn init_tracing() {
     let fmt_layer = fmt::layer()
@@ -35,15 +36,18 @@ async fn main() -> Result<()> {
 
     // Very small CLI: cargo run -- [demo]
     // Examples: cargo run -- demo1 | demo2 | demo3
+    // Note: Demo functions are currently commented out
     let which = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "demo4".to_string());
     match which.as_str() {
-        "demo1" => run_demo1::run_demo1().await?,
-        "demo2" => run_demo2::run_demo2().await?,
-        "demo3" => run_demo3::run_demo3().await?,
-        "demo4" => run_demo4::run_demo4().await?,
-        _ => println!("invalid demo, try again"),
+        "demo1" | "demo2" | "demo3" | "demo4" => {
+            println!("Demo functionality is currently disabled.");
+            println!("The demo functions are commented out during refactoring.");
+        }
+        _ => println!(
+            "Invalid demo option. Available options when enabled: demo1, demo2, demo3, demo4"
+        ),
     }
     Ok(())
 }
