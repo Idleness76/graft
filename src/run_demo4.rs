@@ -11,8 +11,7 @@ use futures::StreamExt;
 use miette::Result;
 use rig::agent::MultiTurnStreamItem;
 use rig::client::CompletionClient;
-use rig::completion::{CompletionModel, GetTokenUsage};
-use rig::message::{Message as RigMessage, Reasoning, Text};
+use rig::message::{Reasoning, Text};
 use rig::prelude::*;
 use rig::providers::gemini::completion::gemini_api_types::{
     AdditionalParameters, GenerationConfig, ThinkingConfig,
