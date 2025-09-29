@@ -1,10 +1,10 @@
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
-use super::checkpointer::{Checkpoint, Checkpointer, CheckpointerError, restore_session_state};
+use super::checkpointer::{restore_session_state, Checkpoint, Checkpointer, CheckpointerError};
 use crate::app::App;
-use crate::channels::Channel;
 use crate::channels::errors::{ErrorEvent, ErrorScope, LadderError};
+use crate::channels::Channel;
 use crate::event_bus::EventBus;
 use crate::node::NodePartial;
 use crate::runtimes::{CheckpointerType, InMemoryCheckpointer};
@@ -399,12 +399,12 @@ impl AppRunner {
                 self.sessions
                     .insert(session_id.to_string(), session_state.clone());
                 // Re-persist if autosave
-                if self.autosave
-                    && let Some(cp) = &self.checkpointer
-                {
-                    let _ = cp
-                        .save(Checkpoint::from_session(session_id, &session_state))
-                        .await;
+                if self.autosave {
+                    if let Some(cp) = &self.checkpointer {
+                        let _ = cp
+                            .save(Checkpoint::from_session(session_id, &session_state))
+                            .await;
+                    }
                 }
                 return Err(e);
             }
@@ -413,12 +413,12 @@ impl AppRunner {
         // Update the session in map & persist if configured
         self.sessions
             .insert(session_id.to_string(), session_state.clone());
-        if self.autosave
-            && let Some(cp) = &self.checkpointer
-        {
-            let _ = cp
-                .save(Checkpoint::from_session(session_id, &session_state))
-                .await;
+        if self.autosave {
+            if let Some(cp) = &self.checkpointer {
+                let _ = cp
+                    .save(Checkpoint::from_session(session_id, &session_state))
+                    .await;
+            }
         }
 
         // Check for interrupt_after
@@ -884,10 +884,76 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore]
     async fn test_resume_from_checkpoint() {
-        // Ignored placeholder test: resume logic will be revisited for SQLite-backed persistence.
-        // Previous implementation contained an early return leading to unreachable code warnings.
+        // Test resuming from a SQLite checkpoint
+        let app = make_test_app();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test_resume.db");
+
+        // Set up environment variable for SQLite URL
+        std::env::set_var(
+            "GRAFT_SQLITE_URL",
+            format!("sqlite://{}", db_path.display()),
+        );
+
+        // Create first runner and session
+        let mut runner1 = AppRunner::new(app.clone(), CheckpointerType::SQLite).await;
+        let initial_state = VersionedState::new_with_user_message("hello from checkpoint test");
+
+        let session_id = "checkpoint_test_session";
+        assert_eq!(
+            runner1
+                .create_session(session_id.into(), initial_state.clone())
+                .await
+                .unwrap(),
+            SessionInit::Fresh
+        );
+
+        // Run one step and verify it completes
+        let step1_result = runner1
+            .run_step(session_id, StepOptions::default())
+            .await
+            .unwrap();
+
+        if let StepResult::Completed(report) = step1_result {
+            assert_eq!(report.step, 1);
+            assert!(!report.ran_nodes.is_empty());
+        } else {
+            panic!("Expected completed step");
+        }
+
+        // Get the session state after first step
+        let session_after_step1 = runner1.get_session(session_id).unwrap().clone();
+        assert_eq!(session_after_step1.step, 1);
+
+        // Drop the first runner to simulate process restart
+        drop(runner1);
+
+        // Create second runner with same SQLite DB - should resume from checkpoint
+        let mut runner2 = AppRunner::new(app, CheckpointerType::SQLite).await;
+
+        // Try to create session with same ID - should resume from checkpoint
+        let resume_result = runner2
+            .create_session(session_id.into(), initial_state)
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            resume_result,
+            SessionInit::Resumed { checkpoint_step: 1 }
+        ));
+
+        // Verify the resumed session has the same state
+        let resumed_session = runner2.get_session(session_id).unwrap();
+        assert_eq!(resumed_session.step, session_after_step1.step);
+        assert_eq!(resumed_session.frontier, session_after_step1.frontier);
+        assert_eq!(
+            resumed_session.state.messages.len(),
+            session_after_step1.state.messages.len()
+        );
+
+        // Clean up environment variable
+        std::env::remove_var("GRAFT_SQLITE_URL");
     }
 
     // A failing node to drive an error path

@@ -100,7 +100,6 @@ impl App {
         run_ids: &[NodeKind],
         node_partials: Vec<NodePartial>,
     ) -> Result<Vec<&'static str>, Box<dyn std::error::Error + Send + Sync>> {
-        // Aggregate per-channel updates (deterministically).
         let mut msgs_all: Vec<Message> = Vec::new();
         let mut extra_all: FxHashMap<String, Value> = FxHashMap::default();
         let mut errors_all: Vec<crate::channels::errors::ErrorEvent> = Vec::new();
@@ -109,28 +108,27 @@ impl App {
             let fallback = NodeKind::Other("?".to_string());
             let nid = run_ids.get(i).unwrap_or(&fallback);
 
-            if let Some(ms) = &p.messages
-                && !ms.is_empty()
-            {
-                println!("  {:?} -> messages: +{}", nid, ms.len());
-                msgs_all.extend(ms.clone());
-            }
-
-            if let Some(ex) = &p.extra
-                && !ex.is_empty()
-            {
-                println!("  {:?} -> extra: +{} keys", nid, ex.len());
-                for (k, v) in ex {
-                    // default shallow merge behavior
-                    extra_all.insert(k.clone(), v.clone());
+            if let Some(ms) = &p.messages {
+                if !ms.is_empty() {
+                    println!("  {:?} -> messages: +{}", nid, ms.len());
+                    msgs_all.extend(ms.clone());
                 }
             }
 
-            if let Some(errs) = &p.errors
-                && !errs.is_empty()
-            {
-                println!("  {:?} -> errors: +{}", nid, errs.len());
-                errors_all.extend(errs.clone());
+            if let Some(ex) = &p.extra {
+                if !ex.is_empty() {
+                    println!("  {:?} -> extra: +{} keys", nid, ex.len());
+                    for (k, v) in ex {
+                        extra_all.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+
+            if let Some(errs) = &p.errors {
+                if !errs.is_empty() {
+                    println!("  {:?} -> errors: +{}", nid, errs.len());
+                    errors_all.extend(errs.clone());
+                }
             }
         }
 
