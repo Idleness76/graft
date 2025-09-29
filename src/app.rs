@@ -25,11 +25,24 @@ use tracing::instrument;
 /// use graft::graph::GraphBuilder;
 /// use graft::runtimes::CheckpointerType;
 /// use graft::state::VersionedState;
+/// use graft::types::NodeKind;
+/// use graft::node::{Node, NodeContext, NodeError, NodePartial};
+/// use async_trait::async_trait;
 ///
+/// # struct MyNode;
+/// # #[async_trait]
+/// # impl Node for MyNode {
+/// #     async fn run(&self, _: graft::state::StateSnapshot, _: NodeContext) -> Result<NodePartial, NodeError> {
+/// #         Ok(NodePartial::default())
+/// #     }
+/// # }
+/// #
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let app = GraphBuilder::new()
 ///     .add_node(NodeKind::Start, MyNode)
+///     .add_node(NodeKind::End, MyNode)
 ///     .add_edge(NodeKind::Start, NodeKind::End)
+///     .set_entry(NodeKind::Start)
 ///     .compile()?;
 ///
 /// let initial_state = VersionedState::new_with_user_message("Hello");
@@ -129,6 +142,7 @@ impl App {
     ///
     /// ```rust,no_run
     /// use graft::state::VersionedState;
+    /// use graft::channels::Channel;
     /// # use graft::app::App;
     /// # async fn example(app: App) -> Result<(), Box<dyn std::error::Error>> {
     /// let initial = VersionedState::new_with_user_message("Start workflow");
@@ -207,9 +221,14 @@ impl App {
     /// # use graft::node::NodePartial;
     /// # use graft::state::VersionedState;
     /// # use graft::types::NodeKind;
-    /// # async fn example(app: App, state: &mut VersionedState) -> Result<(), Box<dyn std::error::Error>> {
-    /// let partials = vec![NodePartial { messages: Some(vec![/* ... */]), ..Default::default() }];
-    /// let updated_channels = app.apply_barrier(state, &[NodeKind::Start], partials).await?;
+    /// # use graft::message::Message;
+    /// # async fn example(app: App, state: &mut VersionedState) -> Result<(), String> {
+    /// let partials = vec![NodePartial {
+    ///     messages: Some(vec![Message::assistant("test")]),
+    ///     ..Default::default()
+    /// }];
+    /// let updated_channels = app.apply_barrier(state, &[NodeKind::Start], partials).await
+    ///     .map_err(|e| format!("Error: {}", e))?;
     /// println!("Updated channels: {:?}", updated_channels);
     /// # Ok(())
     /// # }
