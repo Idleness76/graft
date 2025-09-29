@@ -101,15 +101,58 @@ impl GraphBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use crate::message::Message;
+    
+    // Simple test nodes for graph testing
+    #[derive(Debug, Clone)]
+    struct NodeA;
+    
+    #[async_trait]
+    impl crate::node::Node for NodeA {
+        async fn run(
+            &self,
+            _snapshot: crate::state::StateSnapshot,
+            _ctx: crate::node::NodeContext,
+        ) -> Result<crate::node::NodePartial, crate::node::NodeError> {
+            Ok(crate::node::NodePartial {
+                messages: Some(vec![Message {
+                    role: "assistant".into(),
+                    content: "NodeA executed".into(),
+                }]),
+                ..Default::default()
+            })
+        }
+    }
+    
+    #[derive(Debug, Clone)]
+    struct NodeB;
+    
+    #[async_trait]
+    impl crate::node::Node for NodeB {
+        async fn run(
+            &self,
+            _snapshot: crate::state::StateSnapshot,
+            _ctx: crate::node::NodeContext,
+        ) -> Result<crate::node::NodePartial, crate::node::NodeError> {
+            Ok(crate::node::NodePartial {
+                messages: Some(vec![Message {
+                    role: "assistant".into(),
+                    content: "NodeB executed".into(),
+                }]),
+                ..Default::default()
+            })
+        }
+    }
 
     #[test]
     fn test_add_conditional_edge() {
         use crate::state::StateSnapshot;
         let always_true: super::EdgePredicate = std::sync::Arc::new(|_s: StateSnapshot| true);
         let gb = super::GraphBuilder::new()
-            .add_node(super::NodeKind::Start, super::NodeA)
-            .add_node(super::NodeKind::Other("Y".into()), super::NodeA)
-            .add_node(super::NodeKind::Other("N".into()), super::NodeA)
+            .add_node(super::NodeKind::Start, NodeA)
+            .add_node(super::NodeKind::Other("Y".into()), NodeA)
+            .add_node(super::NodeKind::Other("N".into()), NodeA)
             .add_conditional_edge(
                 super::NodeKind::Start,
                 super::NodeKind::Other("Y".into()),

@@ -636,10 +636,61 @@ impl AppRunner {
 mod tests {
     use super::*;
     use crate::graph::{EdgePredicate, GraphBuilder};
-    use crate::node::{NodeA, NodeB, NodeContext, NodeError, NodePartial};
-
+    use crate::message::Message;
+    use crate::node::{NodeContext, NodeError, NodePartial};
     use crate::state::{StateSnapshot, VersionedState};
     use async_trait::async_trait;
+    use rustc_hash::FxHashMap;
+    use serde_json::json;
+
+    // Simple test nodes for runner testing
+    #[derive(Debug, Clone)]
+    struct NodeA;
+
+    #[async_trait]
+    impl crate::node::Node for NodeA {
+        async fn run(
+            &self,
+            _snapshot: StateSnapshot,
+            _ctx: NodeContext,
+        ) -> Result<NodePartial, NodeError> {
+            let mut extra = FxHashMap::default();
+            extra.insert("node_a_executed".into(), json!(true));
+
+            Ok(NodePartial {
+                messages: Some(vec![Message {
+                    role: "assistant".into(),
+                    content: "NodeA executed".into(),
+                }]),
+                extra: Some(extra),
+                ..Default::default()
+            })
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct NodeB;
+
+    #[async_trait]
+    impl crate::node::Node for NodeB {
+        async fn run(
+            &self,
+            _snapshot: StateSnapshot,
+            _ctx: NodeContext,
+        ) -> Result<NodePartial, NodeError> {
+            let mut extra = FxHashMap::default();
+            extra.insert("node_b_executed".into(), json!(true));
+
+            Ok(NodePartial {
+                messages: Some(vec![Message {
+                    role: "assistant".into(),
+                    content: "NodeB executed".into(),
+                }]),
+                extra: Some(extra),
+                ..Default::default()
+            })
+        }
+    }
 
     struct TestNode {
         message: String,
