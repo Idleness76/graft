@@ -101,13 +101,13 @@ impl GraphBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
     use crate::message::Message;
-    
+    use async_trait::async_trait;
+
     // Simple test nodes for graph testing
     #[derive(Debug, Clone)]
     struct NodeA;
-    
+
     #[async_trait]
     impl crate::node::Node for NodeA {
         async fn run(
@@ -124,10 +124,10 @@ mod tests {
             })
         }
     }
-    
+
     #[derive(Debug, Clone)]
     struct NodeB;
-    
+
     #[async_trait]
     impl crate::node::Node for NodeB {
         async fn run(
@@ -170,6 +170,8 @@ mod tests {
             messages_version: 1,
             extra: rustc_hash::FxHashMap::default(),
             extra_version: 1,
+            errors: vec![],
+            errors_version: 1,
         };
         assert!((ce.predicate)(snap));
     }
@@ -219,12 +221,11 @@ mod tests {
         assert!(app.nodes().contains_key(&NodeKind::Start));
         assert!(app.nodes().contains_key(&NodeKind::End));
         assert_eq!(app.edges().len(), 1);
-        assert!(
-            app.edges()
-                .get(&NodeKind::Start)
-                .unwrap()
-                .contains(&NodeKind::End)
-        );
+        assert!(app
+            .edges()
+            .get(&NodeKind::Start)
+            .unwrap()
+            .contains(&NodeKind::End));
     }
 
     #[test]

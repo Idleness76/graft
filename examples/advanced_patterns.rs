@@ -372,6 +372,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             extra
         },
         extra_version: 1,
+        errors: vec![],
+        errors_version: 1,
     };
 
     println!("\n📊 Initial State:");

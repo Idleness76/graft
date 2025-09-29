@@ -124,6 +124,8 @@ fn snap_with_versions(msgs_version: u32, extra_version: u32) -> StateSnapshot {
         messages_version: msgs_version,
         extra: FxHashMap::default(),
         extra_version,
+        errors: vec![],
+        errors_version: 1,
     }
 }
 

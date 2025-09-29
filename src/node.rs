@@ -455,6 +455,8 @@ mod tests {
             messages_version: 1,
             extra: extra.clone(),
             extra_version: 1,
+            errors: vec![],
+            errors_version: 1,
         };
         assert_eq!(snap.extra["number"], json!(123));
         assert_eq!(snap.extra["text"], json!("abc"));
