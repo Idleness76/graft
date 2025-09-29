@@ -2,7 +2,7 @@ use crate::event_bus::Event;
 use crate::node::{Node, NodeContext, NodeError, NodePartial};
 use crate::state::StateSnapshot;
 use crate::types::NodeKind;
-use futures::stream::{self, StreamExt};
+use futures_util::stream::{self, StreamExt};
 use miette::Diagnostic;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;

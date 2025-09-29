@@ -4,7 +4,7 @@ use tokio::{sync::oneshot, task};
 
 use super::event::Event;
 use super::sink::{EventSink, StdOutSink};
-use crate::telemetry::{CONTEXT_COLOR, PlainFormatter, RESET_COLOR, TelemetryFormatter};
+use crate::telemetry::{PlainFormatter, TelemetryFormatter, CONTEXT_COLOR, RESET_COLOR};
 
 /// EventBus is responsible for receiving events and forwarding them to an output.
 pub struct EventBus {
@@ -126,11 +126,11 @@ impl EventBus {
 
 impl Drop for EventBus {
     fn drop(&mut self) {
-        if let Ok(mut guard) = self.listener.lock()
-            && let Some(state) = guard.take()
-        {
-            let _ = state.shutdown_tx.send(());
-            state.handle.abort();
+        if let Ok(mut guard) = self.listener.lock() {
+            if let Some(state) = guard.take() {
+                let _ = state.shutdown_tx.send(());
+                state.handle.abort();
+            }
         }
     }
 }

@@ -7,7 +7,7 @@ use crate::channels::errors::{ErrorEvent, ErrorScope, LadderError, pretty_print}
 use crate::message::*;
 use crate::runtimes::{CheckpointerType, RuntimeConfig};
 use async_trait::async_trait;
-use futures::StreamExt;
+use futures_util::StreamExt;
 use miette::Result;
 use rig::agent::MultiTurnStreamItem;
 use rig::client::CompletionClient;

@@ -1,33 +1,34 @@
 [package]
 name = "graft"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+description = "Graph-driven, concurrent agent workflow framework with versioned state, deterministic barrier merges, and rich diagnostics."
+license = "MIT"
+repository = "https://github.com/Idleness76/graft"
+readme = "README.md"
+keywords = ["graph","workflow","concurrency","agents","tracing"]
+categories = ["concurrency","data-structures","algorithms"]
+rust-version = "1.83"
+homepage = "https://github.com/Idleness76/graft"
+documentation = "https://docs.rs/graft"
 
 [dependencies]
-miette = { version = "7", features = [
-    "fancy",
-] } # fancy feature enables colorful reports
-anyhow = "1.0" # for error handling in main.rs
-thiserror = "1" # for defining error types
-tracing = "0.1" # for structured logging
-tracing-subscriber = { version = "0.3", features = [
-    "env-filter",
-    "fmt",
-    "ansi",
-] } # for setting up tracing/logging
-tracing-error = "0.2" # for capturing spans in errors
-
+miette = { version = "^7.6", features = ["fancy"] }
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter","fmt","ansi"] }
+tracing-error = "~0.2"
 async-trait = "0.1"
-futures = "0.3"
-serde_json = "1.0"
-serde = "1.0.225"
-tokio = { version = "1.47", features = ["full"] }
-rustc-hash = "2.1"
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+rustc-hash = "~2.1"
 chrono = { version = "0.4", features = ["serde"] }
-rand = "0.9"
-uuid = { version = "1.18", features = ["v4"] }
-rig-core = "0.20"
-sqlx = { version = "0.7", features = [
+rand = "~0.9"
+uuid = { version = "1", features = ["v4"] }
+rig-core = "~0.20"
+sqlx = { version = "~0.8", features = [
     "runtime-tokio-rustls",
     "sqlite",
     "macros",
@@ -35,16 +36,18 @@ sqlx = { version = "0.7", features = [
     "chrono",
     "json",
 ] }
-dotenvy = "0.15"
-once_cell = "1.21.3"
-flume = "0.11.1"
+dotenvy = "~0.15"
+flume = "~0.11"
+
+[dev-dependencies]
+proptest = "1"
+tempfile = "3"
+
+# Optional future section:
+# [package.metadata.docs.rs]
+# all-features = true
+# rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["sqlite-migrations"]
-# Enable automatic running of embedded sqlx migrations for the SQLite checkpointer.
-# Turning this feature off allows external migration orchestration (e.g. CI/CD pipeline).
 sqlite-migrations = []
-
-[dev-dependencies]
-proptest = "1.4"
-tempfile = "3.10"
