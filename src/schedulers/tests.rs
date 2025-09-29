@@ -6,7 +6,7 @@ use crate::types::NodeKind;
 use async_trait::async_trait;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
-use tokio::time::{Duration, sleep};
+use tokio::time::{sleep, Duration};
 
 // A minimal test node that returns a marker message to validate execution.
 struct TestNode {
@@ -21,10 +21,10 @@ impl Node for TestNode {
         ctx: NodeContext,
     ) -> Result<NodePartial, NodeError> {
         Ok(NodePartial {
-            messages: Some(vec![crate::message::Message {
-                role: "assistant".into(),
-                content: format!("ran:{}:step:{}", self.name, ctx.step),
-            }]),
+            messages: Some(vec![crate::message::Message::assistant(&format!(
+                "ran:{}:step:{}",
+                self.name, ctx.step
+            ))]),
             extra: None,
             errors: None,
         })
@@ -46,10 +46,10 @@ impl Node for DelayedNode {
     ) -> Result<NodePartial, NodeError> {
         sleep(Duration::from_millis(self.delay_ms)).await;
         Ok(NodePartial {
-            messages: Some(vec![crate::message::Message {
-                role: "assistant".into(),
-                content: format!("ran:{}:step:{}", self.name, ctx.step),
-            }]),
+            messages: Some(vec![crate::message::Message::assistant(&format!(
+                "ran:{}:step:{}",
+                self.name, ctx.step
+            ))]),
             extra: None,
             errors: None,
         })

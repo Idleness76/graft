@@ -1,0 +1,11 @@
+# Clippy configuration for graft codebase
+# Encourages use of Message convenience constructors over manual struct construction
+
+# Allow certain patterns that are common in this domain
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
+
+# Message-specific guidance (note: these are guidelines, not enforced automatically)
+# - Prefer Message::user(), Message::assistant(), Message::system() over direct construction
+# - Use Message::builder() for complex cases
+# - Use role constants from message::roles module

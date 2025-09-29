@@ -704,10 +704,7 @@ mod tests {
             _ctx: NodeContext,
         ) -> Result<NodePartial, NodeError> {
             Ok(NodePartial {
-                messages: Some(vec![crate::message::Message {
-                    role: "assistant".into(),
-                    content: self.message.clone(),
-                }]),
+                messages: Some(vec![crate::message::Message::assistant(&self.message)]),
                 extra: None,
                 errors: None,
             })

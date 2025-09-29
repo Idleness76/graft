@@ -68,3 +68,14 @@ dotenvy = "0.15"
 [features]
 default = ["sqlite-migrations"]
 sqlite-migrations = []
+
+# Clippy configuration to enforce Message API best practices
+[lints.clippy]
+# Encourage use of convenience constructors over manual struct construction
+manual_string_new = "warn"
+# Encourage use of builder patterns and convenience methods
+new_without_default = "warn"
+# General code quality
+missing_errors_doc = "allow" # We handle this manually
+module_name_repetitions = "allow" # Common in this domain
+too_many_lines = "allow" # Documentation examples can be long
