@@ -1,5 +1,4 @@
 use rustc_hash::FxHashMap;
-use serde_json::Value;
 use std::sync::Arc;
 
 use crate::channels::Channel;
@@ -10,15 +9,53 @@ use crate::runtimes::runner::RunnerError;
 use crate::runtimes::{CheckpointerType, RuntimeConfig, SessionInit};
 use crate::state::*;
 use crate::types::*;
+use crate::utils::collections::new_extra_map;
 use tracing::instrument;
 
 /// Orchestrates graph execution and applies reducers at barriers.
+///
+/// `App` is the central coordination point for workflow execution, managing:
+/// - Node graph topology (nodes, edges, conditional routing)
+/// - State reduction through configurable reducers
+/// - Runtime configuration and checkpointing
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use graft::graph::GraphBuilder;
+/// use graft::runtimes::CheckpointerType;
+/// use graft::state::VersionedState;
+/// use graft::types::NodeKind;
+/// use graft::node::{Node, NodeContext, NodeError, NodePartial};
+/// use async_trait::async_trait;
+///
+/// # struct MyNode;
+/// # #[async_trait]
+/// # impl Node for MyNode {
+/// #     async fn run(&self, _: graft::state::StateSnapshot, _: NodeContext) -> Result<NodePartial, NodeError> {
+/// #         Ok(NodePartial::default())
+/// #     }
+/// # }
+/// #
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let app = GraphBuilder::new()
+///     .add_node(NodeKind::Start, MyNode)
+///     .add_node(NodeKind::End, MyNode)
+///     .add_edge(NodeKind::Start, NodeKind::End)
+///     .set_entry(NodeKind::Start)
+///     .compile()?;
+///
+/// let initial_state = VersionedState::new_with_user_message("Hello");
+/// let final_state = app.invoke(initial_state).await?;
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone)]
 pub struct App {
     nodes: FxHashMap<NodeKind, Arc<dyn Node>>,
     edges: FxHashMap<NodeKind, Vec<NodeKind>>,
     conditional_edges: Vec<crate::graph::ConditionalEdge>,
-    reducer_registery: ReducerRegistry,
+    reducer_registry: ReducerRegistry,
     runtime_config: RuntimeConfig,
 }
 
@@ -34,28 +71,92 @@ impl App {
             nodes,
             edges,
             conditional_edges,
-            reducer_registery: ReducerRegistry::default(),
+            reducer_registry: ReducerRegistry::default(),
             runtime_config,
         }
     }
+
+    /// Returns a reference to the conditional edges in this graph.
+    ///
+    /// Conditional edges enable dynamic routing based on runtime state,
+    /// allowing workflows to branch based on computed conditions.
+    ///
+    /// # Returns
+    /// A slice of conditional edge specifications.
+    #[must_use]
     pub fn conditional_edges(&self) -> &Vec<crate::graph::ConditionalEdge> {
         &self.conditional_edges
     }
 
+    /// Returns a reference to the nodes registry.
+    ///
+    /// Provides access to all registered node implementations in the graph.
+    /// Nodes are keyed by their `NodeKind` identifier.
+    ///
+    /// # Returns
+    /// A map from `NodeKind` to the corresponding `Node` implementation.
+    #[must_use]
     pub fn nodes(&self) -> &FxHashMap<NodeKind, Arc<dyn Node>> {
         &self.nodes
     }
 
+    /// Returns a reference to the unconditional edges in this graph.
+    ///
+    /// Unconditional edges define the static topology of the workflow graph,
+    /// specifying which nodes can transition to which other nodes.
+    ///
+    /// # Returns
+    /// A map from source `NodeKind` to a list of destination `NodeKind`s.
+    #[must_use]
     pub fn edges(&self) -> &FxHashMap<NodeKind, Vec<NodeKind>> {
         &self.edges
     }
 
+    /// Returns a reference to the runtime configuration.
+    ///
+    /// Runtime configuration includes checkpointer settings, session IDs,
+    /// and other execution parameters.
+    ///
+    /// # Returns
+    /// The current runtime configuration.
+    #[must_use]
     pub fn runtime_config(&self) -> &RuntimeConfig {
         &self.runtime_config
     }
 
-    /// Execute until End (or no frontier). Applies reducers after each superstep.
-    /// This is now a convenience wrapper around AppRunner.
+    /// Execute the entire workflow until completion or no nodes remain.
+    ///
+    /// This is the primary entry point for workflow execution. It creates an
+    /// `AppRunner`, manages session state, and coordinates execution through
+    /// to completion.
+    ///
+    /// # Parameters
+    /// * `initial_state` - The starting state for workflow execution
+    ///
+    /// # Returns
+    /// * `Ok(VersionedState)` - The final state after workflow completion
+    /// * `Err(RunnerError)` - If execution fails due to node errors,
+    ///   checkpointer issues, or other runtime problems
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use graft::state::VersionedState;
+    /// use graft::channels::Channel;
+    /// # use graft::app::App;
+    /// # async fn example(app: App) -> Result<(), Box<dyn std::error::Error>> {
+    /// let initial = VersionedState::new_with_user_message("Start workflow");
+    /// let final_state = app.invoke(initial).await?;
+    /// println!("Workflow completed with {} messages", final_state.messages.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Workflow Lifecycle
+    /// 1. Creates an `AppRunner` with the configured checkpointer
+    /// 2. Initializes or resumes a session
+    /// 3. Executes supersteps until End nodes or empty frontier
+    /// 4. Returns the final accumulated state
     #[instrument(skip(self, initial_state), err)]
     pub async fn invoke(
         &self,
@@ -92,7 +193,46 @@ impl App {
         runner.run_until_complete(&session_id).await
     }
 
-    /// Merge NodePartial updates, invoke reducers, bump versions if content changed.
+    /// Merge node outputs and apply state reductions after a superstep.
+    ///
+    /// This method coordinates the barrier synchronization phase of workflow
+    /// execution, where all node outputs from a superstep are collected,
+    /// merged, and applied to the global state via registered reducers.
+    ///
+    /// # Parameters
+    /// * `state` - Mutable reference to the current versioned state
+    /// * `run_ids` - Slice of node kinds that executed in this superstep
+    /// * `node_partials` - Vector of partial updates from each executed node
+    ///
+    /// # Returns
+    /// * `Ok(Vec<&'static str>)` - Names of channels that were updated
+    /// * `Err(Box<dyn Error>)` - If reducer application fails
+    ///
+    /// # State Management
+    /// - Aggregates messages, extra data, and errors from all nodes
+    /// - Applies registered reducers to merge updates into global state
+    /// - Intelligently bumps version numbers only when content changes
+    /// - Preserves deterministic merge behavior for reproducible execution
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # use graft::app::App;
+    /// # use graft::node::NodePartial;
+    /// # use graft::state::VersionedState;
+    /// # use graft::types::NodeKind;
+    /// # use graft::message::Message;
+    /// # async fn example(app: App, state: &mut VersionedState) -> Result<(), String> {
+    /// let partials = vec![NodePartial {
+    ///     messages: Some(vec![Message::assistant("test")]),
+    ///     ..Default::default()
+    /// }];
+    /// let updated_channels = app.apply_barrier(state, &[NodeKind::Start], partials).await
+    ///     .map_err(|e| format!("Error: {}", e))?;
+    /// println!("Updated channels: {:?}", updated_channels);
+    /// # Ok(())
+    /// # }
+    /// ```
     #[instrument(skip(self, state, run_ids, node_partials), err)]
     pub async fn apply_barrier(
         &self,
@@ -101,7 +241,7 @@ impl App {
         node_partials: Vec<NodePartial>,
     ) -> Result<Vec<&'static str>, Box<dyn std::error::Error + Send + Sync>> {
         let mut msgs_all: Vec<Message> = Vec::new();
-        let mut extra_all: FxHashMap<String, Value> = FxHashMap::default();
+        let mut extra_all = new_extra_map();
         let mut errors_all: Vec<crate::channels::errors::ErrorEvent> = Vec::new();
 
         for (i, p) in node_partials.iter().enumerate() {
@@ -110,14 +250,14 @@ impl App {
 
             if let Some(ms) = &p.messages {
                 if !ms.is_empty() {
-                    println!("  {:?} -> messages: +{}", nid, ms.len());
+                    tracing::debug!(node = ?nid, count = ms.len(), "Node produced messages");
                     msgs_all.extend(ms.clone());
                 }
             }
 
             if let Some(ex) = &p.extra {
                 if !ex.is_empty() {
-                    println!("  {:?} -> extra: +{} keys", nid, ex.len());
+                    tracing::debug!(node = ?nid, keys = ex.len(), "Node produced extra data");
                     for (k, v) in ex {
                         extra_all.insert(k.clone(), v.clone());
                     }
@@ -126,7 +266,7 @@ impl App {
 
             if let Some(errs) = &p.errors {
                 if !errs.is_empty() {
-                    println!("  {:?} -> errors: +{}", nid, errs.len());
+                    tracing::debug!(node = ?nid, count = errs.len(), "Node produced errors");
                     errors_all.extend(errs.clone());
                 }
             }
@@ -157,7 +297,7 @@ impl App {
         let extra_before_ver = state.extra.version();
 
         // Apply reducers (they do NOT bump versions)
-        self.reducer_registery
+        self.reducer_registry
             .apply_all(&mut *state, &merged_updates)?;
 
         // Detect changes & bump versions responsibly
@@ -168,8 +308,8 @@ impl App {
             state
                 .messages
                 .set_version(msgs_before_ver.saturating_add(1));
-            println!(
-                "  barrier: messages len {} -> {}, v {} -> {}",
+            tracing::info!(
+                "Messages channel updated: {} -> {} messages, version {} -> {}",
                 msgs_before_len,
                 state.messages.len(),
                 msgs_before_ver,
@@ -182,8 +322,8 @@ impl App {
         let extra_changed = extra_after != extra_before;
         if extra_changed {
             state.extra.set_version(extra_before_ver.saturating_add(1));
-            println!(
-                "  barrier: extra keys {} -> {}, v {} -> {}",
+            tracing::info!(
+                "Extra channel updated: {} -> {} keys, version {} -> {}",
                 extra_before.len(),
                 extra_after.len(),
                 extra_before_ver,
@@ -200,6 +340,7 @@ impl App {
 mod tests {
     use super::*;
     use rustc_hash::FxHashMap;
+    use serde_json::Value;
 
     fn make_state() -> VersionedState {
         VersionedState::new_with_user_message("hi")
@@ -210,7 +351,7 @@ mod tests {
             nodes: FxHashMap::default(),
             edges: FxHashMap::default(),
             conditional_edges: Vec::new(),
-            reducer_registery: ReducerRegistry::default(),
+            reducer_registry: ReducerRegistry::default(),
             runtime_config: RuntimeConfig::default(),
         }
     }

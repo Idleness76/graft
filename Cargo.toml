@@ -12,36 +12,53 @@ rust-version = "1.83"
 homepage = "https://github.com/Idleness76/graft"
 documentation = "https://docs.rs/graft"
 
-[dependencies]
-miette = { version = "^7.6", features = ["fancy"] }
-thiserror = "2.0"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter","fmt","ansi"] }
-tracing-error = "~0.2"
-async-trait = "0.1"
-futures-util = "0.3"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tokio = { version = "1", features = ["full"] }
-rustc-hash = "~2.1"
-chrono = { version = "0.4", features = ["serde"] }
-rand = "~0.9"
-uuid = { version = "1", features = ["v4"] }
-rig-core = "~0.20"
-sqlx = { version = "~0.8", features = [
-    "runtime-tokio-rustls",
-    "sqlite",
-    "macros",
-    "uuid",
-    "chrono",
-    "json",
-] }
-dotenvy = "~0.15"
-flume = "~0.11"
-
 [dev-dependencies]
 proptest = "1"
 tempfile = "3"
+
+[dependencies]
+# Error handling & diagnostics
+miette = { version = "7.6", features = ["fancy"] }
+thiserror = "2"
+
+# Tracing & logging  
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "ansi"] }
+tracing-error = "0.2"
+
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+async-trait = "0.1"
+futures-util = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Data structures & utilities
+rustc-hash = "2.1"
+flume = "0.11"
+
+# Time & IDs
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+rand = "0.9"
+
+# LLM framework (external dependency)
+rig-core = "0.20"
+
+# Database
+sqlx = { version = "0.8", features = [
+    "runtime-tokio-rustls",
+    "sqlite", 
+    "macros",
+    "uuid",
+    "chrono",
+    "json"
+] }
+
+# Configuration
+dotenvy = "0.15"
 
 # Optional future section:
 # [package.metadata.docs.rs]
@@ -51,3 +68,14 @@ tempfile = "3"
 [features]
 default = ["sqlite-migrations"]
 sqlite-migrations = []
+
+# Clippy configuration to enforce Message API best practices
+[lints.clippy]
+# Encourage use of convenience constructors over manual struct construction
+manual_string_new = "warn"
+# Encourage use of builder patterns and convenience methods
+new_without_default = "warn"
+# General code quality
+missing_errors_doc = "allow" # We handle this manually
+module_name_repetitions = "allow" # Common in this domain
+too_many_lines = "allow" # Documentation examples can be long
