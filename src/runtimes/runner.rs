@@ -639,6 +639,7 @@ mod tests {
     use crate::message::Message;
     use crate::node::{NodeContext, NodeError, NodePartial};
     use crate::state::{StateSnapshot, VersionedState};
+    use crate::testing::{FailingNode, TestNode};
     use async_trait::async_trait;
     use rustc_hash::FxHashMap;
     use serde_json::json;
@@ -692,34 +693,10 @@ mod tests {
         }
     }
 
-    struct TestNode {
-        message: String,
-    }
-
-    #[async_trait]
-    impl crate::node::Node for TestNode {
-        async fn run(
-            &self,
-            _snapshot: StateSnapshot,
-            _ctx: NodeContext,
-        ) -> Result<NodePartial, NodeError> {
-            Ok(NodePartial {
-                messages: Some(vec![crate::message::Message::assistant(&self.message)]),
-                extra: None,
-                errors: None,
-            })
-        }
-    }
-
     fn make_test_app() -> App {
         let mut builder = GraphBuilder::new();
         builder = builder.add_node(NodeKind::Start, NodeA);
-        builder = builder.add_node(
-            NodeKind::Other("test".into()),
-            TestNode {
-                message: "test message".into(),
-            },
-        );
+        builder = builder.add_node(NodeKind::Other("test".into()), TestNode { name: "test" });
         builder = builder.add_node(NodeKind::End, NodeB);
         builder = builder.add_edge(NodeKind::Start, NodeKind::Other("test".into()));
         builder = builder.add_edge(NodeKind::Other("test".into()), NodeKind::End);
@@ -733,24 +710,9 @@ mod tests {
         let pred: EdgePredicate =
             std::sync::Arc::new(|snap: StateSnapshot| snap.extra.contains_key("go_yes"));
         let gb = GraphBuilder::new()
-            .add_node(
-                NodeKind::Start,
-                TestNode {
-                    message: "start".into(),
-                },
-            )
-            .add_node(
-                NodeKind::Other("Y".into()),
-                TestNode {
-                    message: "yes path".into(),
-                },
-            )
-            .add_node(
-                NodeKind::Other("N".into()),
-                TestNode {
-                    message: "no path".into(),
-                },
-            )
+            .add_node(NodeKind::Start, TestNode { name: "start" })
+            .add_node(NodeKind::Other("Y".into()), TestNode { name: "yes path" })
+            .add_node(NodeKind::Other("N".into()), TestNode { name: "no path" })
             .add_edge(NodeKind::Start, NodeKind::Start) // Add unconditional edge to START itself for initial frontier
             .add_conditional_edge(
                 NodeKind::Start,
@@ -1004,25 +966,11 @@ mod tests {
         std::env::remove_var("GRAFT_SQLITE_URL");
     }
 
-    // A failing node to drive an error path
-    struct FailingNode;
-
-    #[async_trait]
-    impl crate::node::Node for FailingNode {
-        async fn run(
-            &self,
-            _snapshot: StateSnapshot,
-            _ctx: NodeContext,
-        ) -> Result<NodePartial, NodeError> {
-            Err(NodeError::MissingInput { what: "need_foo" })
-        }
-    }
-
     #[tokio::test]
     async fn test_error_event_appended_on_failure() {
         let mut gb = GraphBuilder::new();
         gb = gb.add_node(NodeKind::Start, NodeA);
-        gb = gb.add_node(NodeKind::Other("X".into()), FailingNode);
+        gb = gb.add_node(NodeKind::Other("X".into()), FailingNode::default());
         gb = gb.add_edge(NodeKind::Start, NodeKind::Other("X".into()));
         gb = gb.set_entry(NodeKind::Start);
         let app = gb.compile().unwrap();
