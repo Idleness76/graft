@@ -121,7 +121,7 @@ impl Node for NodeB {
 
         println!("model response is: {:?}", response);
 
-        let mut extra: FxHashMap<String, Value> = FxHashMap::default();
+        let mut extra = crate::utils::collections::new_extra_map();
         extra.insert("cat iterations".into(), json!(cat_iterations + 1));
         let messages: Result<Vec<Message>, serde_json::Error> = response
             .choice

@@ -647,7 +647,7 @@ mod tests {
         let snap = StateSnapshot {
             messages: vec![],
             messages_version: 1,
-            extra: rustc_hash::FxHashMap::default(),
+            extra: crate::utils::collections::new_extra_map(),
             extra_version: 1,
             errors: vec![],
             errors_version: 1,
