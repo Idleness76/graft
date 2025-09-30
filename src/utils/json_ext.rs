@@ -70,7 +70,11 @@ pub enum MergeStrategy {
 /// let expected = json!({"a": 1, "b": {"x": 10, "y": 20}, "c": 3});
 /// assert_eq!(merged, expected);
 /// ```
-pub fn deep_merge(left: &Value, right: &Value, strategy: MergeStrategy) -> Result<Value, JsonError> {
+pub fn deep_merge(
+    left: &Value,
+    right: &Value,
+    strategy: MergeStrategy,
+) -> Result<Value, JsonError> {
     deep_merge_with_path(left, right, strategy, "")
 }
 
@@ -261,7 +265,7 @@ pub fn get_by_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
 ///
 /// let mut data = json!({});
 /// set_by_path(&mut data, "user.profile.name", json!("Alice")).unwrap();
-/// 
+///
 /// let expected = json!({"user": {"profile": {"name": "Alice"}}});
 /// assert_eq!(data, expected);
 /// ```
@@ -393,6 +397,73 @@ impl JsonValueExt for Value {
     }
 }
 
+/// Trait for types that can be serialized to/from JSON strings with specific error handling.
+///
+/// This provides a consistent interface for JSON operations throughout the framework.
+/// Unlike the other utilities in this module which work with `JsonError`, this trait
+/// is generic over the error type to allow different modules to use their own error types.
+pub trait JsonSerializable<E>: serde::Serialize + for<'de> serde::de::DeserializeOwned {
+    /// Serialize this object to a JSON string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization fails.
+    fn to_json_string(&self) -> Result<String, E>;
+
+    /// Deserialize an object from a JSON string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if deserialization fails.
+    fn from_json_str(s: &str) -> Result<Self, E>;
+}
+
+/// Helper for JSON serialization with custom error context.
+///
+/// This utility provides context-aware JSON serialization that can be used
+/// by different modules with their own error types.
+///
+/// # Parameters
+/// * `value` - The value to serialize
+/// * `context` - Context string for error messages
+/// * `error_mapper` - Function to convert serde_json::Error to the target error type
+///
+/// # Returns
+/// JSON string or mapped error
+pub fn serialize_with_context<T, E>(
+    value: &T,
+    context: &str,
+    error_mapper: impl FnOnce(serde_json::Error, &str) -> E,
+) -> Result<String, E>
+where
+    T: serde::Serialize,
+{
+    serde_json::to_string(value).map_err(|e| error_mapper(e, context))
+}
+
+/// Helper for JSON deserialization with custom error context.
+///
+/// This utility provides context-aware JSON deserialization that can be used
+/// by different modules with their own error types.
+///
+/// # Parameters
+/// * `json` - The JSON string to deserialize
+/// * `context` - Context string for error messages
+/// * `error_mapper` - Function to convert serde_json::Error to the target error type
+///
+/// # Returns
+/// Deserialized value or mapped error
+pub fn deserialize_with_context<T, E>(
+    json: &str,
+    context: &str,
+    error_mapper: impl FnOnce(serde_json::Error, &str) -> E,
+) -> Result<T, E>
+where
+    T: serde::de::DeserializeOwned,
+{
+    serde_json::from_str(json).map_err(|e| error_mapper(e, context))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -439,8 +510,14 @@ mod tests {
     fn test_get_by_path() {
         let data = json!({"user": {"profile": {"name": "Alice"}}});
 
-        assert_eq!(get_by_path(&data, "user.profile.name"), Some(&json!("Alice")));
-        assert_eq!(get_by_path(&data, "user.profile"), Some(&json!({"name": "Alice"})));
+        assert_eq!(
+            get_by_path(&data, "user.profile.name"),
+            Some(&json!("Alice"))
+        );
+        assert_eq!(
+            get_by_path(&data, "user.profile"),
+            Some(&json!({"name": "Alice"}))
+        );
         assert_eq!(get_by_path(&data, "user.missing"), None);
     }
 
@@ -484,5 +561,67 @@ mod tests {
         let merged = merge_multiple(values.iter(), MergeStrategy::DeepMerge).unwrap();
         let expected = json!({"a": 1, "b": 2, "c": 3});
         assert_eq!(merged, expected);
+    }
+
+    #[test]
+    fn test_serialize_with_context() {
+        #[derive(Debug, PartialEq)]
+        struct TestError(String);
+
+        let data = json!({"key": "value"});
+        let result =
+            serialize_with_context(&data, "test", |e, ctx| TestError(format!("{ctx}: {e}")));
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().contains("\"key\":\"value\""));
+
+        // Test error case
+        struct BadSerialize;
+        impl serde::Serialize for BadSerialize {
+            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                Err(serde::ser::Error::custom("test error"))
+            }
+        }
+
+        let bad_data = BadSerialize;
+        let error_result = serialize_with_context(&bad_data, "test_context", |e, ctx| {
+            TestError(format!("{ctx}: {e}"))
+        });
+
+        assert!(error_result.is_err());
+        assert_eq!(
+            error_result.unwrap_err(),
+            TestError("test_context: test error".to_string())
+        );
+    }
+
+    #[test]
+    fn test_deserialize_with_context() {
+        #[derive(Debug, PartialEq)]
+        struct TestError(String);
+
+        use serde_json::Value;
+        let json_str = r#"{"key": "value"}"#;
+        let result: Result<Value, TestError> =
+            deserialize_with_context(json_str, "test", |e, ctx| TestError(format!("{ctx}: {e}")));
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), json!({"key": "value"}));
+
+        // Test error case
+        let bad_json = r#"{invalid json}"#;
+        let error_result: Result<Value, TestError> =
+            deserialize_with_context(bad_json, "test_context", |e, ctx| {
+                TestError(format!("{ctx}: {e}"))
+            });
+
+        assert!(error_result.is_err());
+        let error = error_result.unwrap_err();
+        assert!(error.0.starts_with("test_context:"));
+        // Just check that we got some error message about parsing
+        assert!(error.0.len() > "test_context:".len());
     }
 }
