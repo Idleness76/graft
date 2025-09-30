@@ -1,7 +1,7 @@
 use super::scheduler::{Scheduler, SchedulerState, StepRunResult};
 use crate::event_bus::EventBus;
 use crate::node::{Node, NodeError};
-use crate::testing::{create_test_snapshot, make_delayed_registry, make_test_registry, FailingNode};
+use crate::utils::testing::{create_test_snapshot, make_delayed_registry, make_test_registry, FailingNode};
 use crate::types::NodeKind;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;

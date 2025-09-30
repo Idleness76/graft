@@ -639,7 +639,7 @@ mod tests {
     use crate::message::Message;
     use crate::node::{NodeContext, NodeError, NodePartial};
     use crate::state::{StateSnapshot, VersionedState};
-    use crate::testing::{FailingNode, TestNode};
+    use crate::utils::testing::{FailingNode, TestNode};
     use async_trait::async_trait;
     use rustc_hash::FxHashMap;
     use serde_json::json;

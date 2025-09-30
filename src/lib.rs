@@ -168,4 +168,3 @@ pub mod utils;
 
 #[cfg(test)]
 mod test_error_persistence;
-pub mod testing;
