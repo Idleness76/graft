@@ -1,12 +1,23 @@
 //! Core types for the Graft workflow framework.
 //!
 //! This module defines the fundamental types used throughout the Graft system
-//! for identifying nodes and channels in workflow graphs.
+//! for identifying nodes and channels in workflow graphs. These are the core
+//! domain concepts that define what a workflow *is*.
+//!
+//! For runtime execution types (session IDs, step numbers), see [`crate::runtimes::types`].
 //!
 //! # Key Types
 //!
 //! - [`NodeKind`]: Identifies different types of nodes in a workflow graph
 //! - [`ChannelType`]: Identifies different types of data channels for state management
+//!
+//! # Type Organization
+//!
+//! Graft organizes types by conceptual domain:
+//!
+//! - **Core types** (this module): Fundamental workflow concepts (`NodeKind`, `ChannelType`)
+//! - **Runtime types** ([`crate::runtimes::types`]): Execution infrastructure (`SessionId`, `StepNumber`)
+//! - **Utility types**: Domain-specific helpers in their respective modules
 //!
 //! # Examples
 //!

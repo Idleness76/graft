@@ -121,10 +121,12 @@ pub enum RunnerError {
 
 impl AppRunner {
     /// Create a new AppRunner wrapping the given App
+    #[must_use]
     pub async fn new(app: App, checkpointer_type: CheckpointerType) -> Self {
         Self::with_options(app, checkpointer_type, true).await
     }
 
+    #[must_use]
     pub async fn from_arc(app: Arc<App>, checkpointer_type: CheckpointerType) -> Self {
         Self::with_options_arc(app, checkpointer_type, true).await
     }
@@ -621,12 +623,26 @@ impl AppRunner {
         Ok(final_state)
     }
 
-    /// Get a snapshot of the current session state
+    /// Get a snapshot of the current session state.
+    ///
+    /// # Parameters
+    ///
+    /// * `session_id` - The session identifier
+    ///
+    /// # Returns
+    ///
+    /// `Some(&SessionState)` if the session exists, `None` otherwise
+    #[must_use]
     pub fn get_session(&self, session_id: &str) -> Option<&SessionState> {
         self.sessions.get(session_id)
     }
 
-    /// List all session IDs
+    /// List all active session IDs.
+    ///
+    /// # Returns
+    ///
+    /// A vector of session ID references
+    #[must_use]
     pub fn list_sessions(&self) -> Vec<&String> {
         self.sessions.keys().collect()
     }

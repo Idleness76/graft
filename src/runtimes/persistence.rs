@@ -26,7 +26,22 @@ use crate::{
     runtimes::checkpointer::Checkpoint,
     state::VersionedState,
     types::NodeKind,
+    utils::json_ext::JsonSerializable,
 };
+
+/// Blanket implementation of JsonSerializable for all suitable types using PersistenceError.
+impl<T> JsonSerializable<PersistenceError> for T
+where
+    T: serde::Serialize + for<'de> serde::de::DeserializeOwned,
+{
+    fn to_json_string(&self) -> std::result::Result<String, PersistenceError> {
+        serde_json::to_string(self).map_err(|e| PersistenceError::Serde { source: e })
+    }
+
+    fn from_json_str(s: &str) -> std::result::Result<Self, PersistenceError> {
+        serde_json::from_str(s).map_err(|e| PersistenceError::Serde { source: e })
+    }
+}
 
 /// Channel that stores a vector collection (e.g., messages) with version metadata.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -204,25 +219,10 @@ impl TryFrom<PersistedCheckpoint> for Checkpoint {
     }
 }
 
-/* ---------- Convenience JSON helpers (optional) ---------- */
+/* ---------- Convenience JSON helpers (using JsonSerializable trait from utils::json_ext) ---------- */
 
-impl PersistedState {
-    pub fn to_json_string(&self) -> Result<String> {
-        serde_json::to_string(self).map_err(|e| PersistenceError::Serde { source: e })
-    }
-    pub fn from_json_str(s: &str) -> Result<Self> {
-        serde_json::from_str(s).map_err(|e| PersistenceError::Serde { source: e })
-    }
-}
-
-impl PersistedCheckpoint {
-    pub fn to_json_string(&self) -> Result<String> {
-        serde_json::to_string(self).map_err(|e| PersistenceError::Serde { source: e })
-    }
-    pub fn from_json_str(s: &str) -> Result<Self> {
-        serde_json::from_str(s).map_err(|e| PersistenceError::Serde { source: e })
-    }
-}
+// Both PersistedState and PersistedCheckpoint automatically implement JsonSerializable
+// through the blanket implementation above, providing to_json_string() and from_json_str() methods.
 
 /* ---------- Tests ---------- */
 

@@ -67,7 +67,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use miette::Diagnostic;
 use serde_json::Value;
-use sqlx::{Row, SqlitePool, sqlite::SqliteRow};
+use sqlx::{sqlite::SqliteRow, Row, SqlitePool};
 use thiserror::Error;
 use tracing::instrument;
 
@@ -76,6 +76,10 @@ use crate::{
     runtimes::persistence::{PersistedState, PersistedVersionsSeen},
     state::VersionedState,
     types::NodeKind,
+};
+
+use super::checkpointer_sqlite_helpers::{
+    deserialize_json, deserialize_json_value, require_json_field, serialize_json,
 };
 
 #[derive(Debug, Error, Diagnostic)]
@@ -113,13 +117,17 @@ pub enum SqliteCheckpointerError {
 impl From<SqliteCheckpointerError> for CheckpointerError {
     fn from(e: SqliteCheckpointerError) -> Self {
         match e {
-            SqliteCheckpointerError::Sqlx(err) => CheckpointerError::Backend(err.to_string()),
-            SqliteCheckpointerError::Serde(err) => CheckpointerError::Other(err.to_string()),
-            SqliteCheckpointerError::Missing(what) => {
-                CheckpointerError::Other(format!("missing persisted field: {what}"))
-            }
-            SqliteCheckpointerError::Backend(msg) => CheckpointerError::Backend(msg),
-            SqliteCheckpointerError::Other(msg) => CheckpointerError::Other(msg),
+            SqliteCheckpointerError::Sqlx(err) => CheckpointerError::Backend {
+                message: err.to_string(),
+            },
+            SqliteCheckpointerError::Serde(err) => CheckpointerError::Other {
+                message: err.to_string(),
+            },
+            SqliteCheckpointerError::Missing(what) => CheckpointerError::Other {
+                message: format!("missing persisted field: {what}"),
+            },
+            SqliteCheckpointerError::Backend(msg) => CheckpointerError::Backend { message: msg },
+            SqliteCheckpointerError::Other(msg) => CheckpointerError::Other { message: msg },
         }
     }
 }
@@ -137,19 +145,25 @@ impl std::fmt::Debug for SQLiteCheckpointer {
 
 impl SQLiteCheckpointer {
     /// Connect (or create) a SQLite database at `database_url`.
-    /// Example URL: "sqlite://graft.db"
+    /// Example URL: \"sqlite://graft.db\"
+    ///
+    /// Returns a configured `SQLiteCheckpointer` ready for use.
+    #[must_use = "checkpointer must be used to persist state"]
     #[instrument(skip(database_url))]
     pub async fn connect(database_url: &str) -> std::result::Result<Self, CheckpointerError> {
-        let pool = SqlitePool::connect(database_url)
-            .await
-            .map_err(|e| CheckpointerError::Backend(format!("connect error: {e}")))?;
+        let pool =
+            SqlitePool::connect(database_url)
+                .await
+                .map_err(|e| CheckpointerError::Backend {
+                    message: format!("connect error: {e}"),
+                })?;
         // Run embedded migrations only if the feature is enabled (idempotent).
         #[cfg(feature = "sqlite-migrations")]
         {
             if let Err(e) = sqlx::migrate!("./migrations").run(&pool).await {
-                return Err(CheckpointerError::Backend(format!(
-                    "migration failure: {e}"
-                )));
+                return Err(CheckpointerError::Backend {
+                    message: format!("migration failure: {e}"),
+                });
             }
         }
         #[cfg(not(feature = "sqlite-migrations"))]
@@ -168,14 +182,11 @@ impl Checkpointer for SQLiteCheckpointer {
     async fn save(&self, checkpoint: Checkpoint) -> Result<()> {
         // Serialize using persistence module (serde-based)
         let persisted_state = PersistedState::from(&checkpoint.state);
-        let state_json = serde_json::to_string(&persisted_state)
-            .map_err(|e| CheckpointerError::Other(format!("state serialize: {e}")))?;
+        let state_json = serialize_json(&persisted_state, "state")?;
         let frontier_enc: Vec<String> = checkpoint.frontier.iter().map(|k| k.encode()).collect();
-        let frontier_json = serde_json::to_string(&frontier_enc)
-            .map_err(|e| CheckpointerError::Other(format!("frontier serialize: {e}")))?;
+        let frontier_json = serialize_json(&frontier_enc, "frontier")?;
         let persisted_vs = PersistedVersionsSeen(checkpoint.versions_seen.clone());
-        let versions_seen_json = serde_json::to_string(&persisted_vs)
-            .map_err(|e| CheckpointerError::Other(format!("versions_seen serialize: {e}")))?;
+        let versions_seen_json = serialize_json(&persisted_vs, "versions_seen")?;
 
         // Placeholder arrays (StepReport not folded into Checkpoint yet)
         let empty_arr = "[]";
@@ -184,7 +195,9 @@ impl Checkpointer for SQLiteCheckpointer {
             .pool
             .begin()
             .await
-            .map_err(|e| CheckpointerError::Backend(format!("tx begin: {e}")))?;
+            .map_err(|e| CheckpointerError::Backend {
+                message: format!("tx begin: {e}"),
+            })?;
 
         // Ensure session row
         sqlx::query(
@@ -197,7 +210,9 @@ impl Checkpointer for SQLiteCheckpointer {
         .bind(checkpoint.concurrency_limit as i64)
         .execute(&mut *tx)
         .await
-        .map_err(|e| CheckpointerError::Backend(format!("insert session: {e}")))?;
+        .map_err(|e| CheckpointerError::Backend {
+            message: format!("insert session: {e}"),
+        })?;
 
         // Insert or replace step row (allows idempotent re-save of same step)
         sqlx::query(
@@ -224,11 +239,13 @@ impl Checkpointer for SQLiteCheckpointer {
         .bind(empty_arr) // updated_channels_json
         .execute(&mut *tx)
         .await
-        .map_err(|e| CheckpointerError::Backend(format!("insert step: {e}")))?;
+        .map_err(|e| CheckpointerError::Backend {
+            message: format!("insert step: {e}"),
+        })?;
 
-        tx.commit()
-            .await
-            .map_err(|e| CheckpointerError::Backend(format!("tx commit: {e}")))?;
+        tx.commit().await.map_err(|e| CheckpointerError::Backend {
+            message: format!("tx commit: {e}"),
+        })?;
 
         Ok(())
     }
@@ -252,7 +269,9 @@ impl Checkpointer for SQLiteCheckpointer {
         .bind(session_id)
         .fetch_optional(&*self.pool)
         .await
-        .map_err(|e| CheckpointerError::Backend(format!("select latest: {e}")))?;
+        .map_err(|e| CheckpointerError::Backend {
+            message: format!("select latest: {e}"),
+        })?;
 
         let row = match row_opt {
             Some(r) => r,
@@ -261,16 +280,21 @@ impl Checkpointer for SQLiteCheckpointer {
 
         let last_step: i64 = row.get("last_step");
 
-        let state_json: Option<String> = row
-            .try_get("last_state_json")
-            .map_err(|e| CheckpointerError::Backend(format!("last_state_json read: {e}")))?;
-        let frontier_json: Option<String> = row
-            .try_get("last_frontier_json")
-            .map_err(|e| CheckpointerError::Backend(format!("last_frontier_json read: {e}")))?;
+        let state_json: Option<String> =
+            row.try_get("last_state_json")
+                .map_err(|e| CheckpointerError::Backend {
+                    message: format!("last_state_json read: {e}"),
+                })?;
+        let frontier_json: Option<String> =
+            row.try_get("last_frontier_json")
+                .map_err(|e| CheckpointerError::Backend {
+                    message: format!("last_frontier_json read: {e}"),
+                })?;
         let versions_seen_json: Option<String> =
-            row.try_get("last_versions_seen_json").map_err(|e| {
-                CheckpointerError::Backend(format!("last_versions_seen_json read: {e}"))
-            })?;
+            row.try_get("last_versions_seen_json")
+                .map_err(|e| CheckpointerError::Backend {
+                    message: format!("last_versions_seen_json read: {e}"),
+                })?;
         let concurrency_limit: i64 = row.get("concurrency_limit");
         let updated_at_str: String = row.get("updated_at");
 
@@ -279,37 +303,31 @@ impl Checkpointer for SQLiteCheckpointer {
             return Ok(None);
         }
 
-        let state_payload = state_json.ok_or_else(|| {
-            CheckpointerError::Other("missing state_json for persisted checkpoint".into())
-        })?;
-        let frontier_payload = frontier_json.ok_or_else(|| {
-            CheckpointerError::Other("missing frontier_json for persisted checkpoint".into())
-        })?;
-        let versions_seen_payload = versions_seen_json.ok_or_else(|| {
-            CheckpointerError::Other("missing versions_seen_json for persisted checkpoint".into())
-        })?;
+        let state_payload = require_json_field(state_json, "state_json")?;
+        let frontier_payload = require_json_field(frontier_json, "frontier_json")?;
+        let versions_seen_payload = require_json_field(versions_seen_json, "versions_seen_json")?;
 
-        let state_val: Value = serde_json::from_str(&state_payload)
-            .map_err(|e| CheckpointerError::Other(format!("state parse: {e}")))?;
-        let frontier_val: Value = serde_json::from_str(&frontier_payload)
-            .map_err(|e| CheckpointerError::Other(format!("frontier parse: {e}")))?;
-        let versions_seen_val: Value = serde_json::from_str(&versions_seen_payload)
-            .map_err(|e| CheckpointerError::Other(format!("versions_seen parse: {e}")))?;
+        let state_val: Value = deserialize_json(&state_payload, "state")?;
+        let frontier_val: Value = deserialize_json(&frontier_payload, "frontier")?;
+        let versions_seen_val: Value = deserialize_json(&versions_seen_payload, "versions_seen")?;
 
         // Deserialize using persistence models
-        let persisted_state: PersistedState = serde_json::from_value(state_val)
-            .map_err(|e| CheckpointerError::Other(format!("state parse (serde): {e}")))?;
-        let state = VersionedState::try_from(persisted_state)
-            .map_err(|e| CheckpointerError::Other(format!("state convert: {e}")))?;
+        let persisted_state: PersistedState = deserialize_json_value(state_val, "state")?;
+        let state =
+            VersionedState::try_from(persisted_state).map_err(|e| CheckpointerError::Other {
+                message: format!("state convert: {e}"),
+            })?;
         let frontier: Vec<NodeKind> = frontier_val
             .as_array()
-            .ok_or_else(|| CheckpointerError::Other("frontier not array".into()))?
+            .ok_or_else(|| CheckpointerError::Other {
+                message: "frontier not array".to_string(),
+            })?
             .iter()
             .filter_map(|v| v.as_str())
             .map(NodeKind::decode)
             .collect();
-        let persisted_vs: PersistedVersionsSeen = serde_json::from_value(versions_seen_val)
-            .map_err(|e| CheckpointerError::Other(format!("versions_seen parse: {e}")))?;
+        let persisted_vs: PersistedVersionsSeen =
+            deserialize_json_value(versions_seen_val, "versions_seen")?;
         let versions_seen = persisted_vs.0;
 
         let created_at = DateTime::parse_from_rfc3339(&updated_at_str)
@@ -337,7 +355,9 @@ impl Checkpointer for SQLiteCheckpointer {
         )
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| CheckpointerError::Backend(format!("list sessions: {e}")))?;
+        .map_err(|e| CheckpointerError::Backend {
+            message: format!("list sessions: {e}"),
+        })?;
 
         Ok(rows.into_iter().map(|r| r.get::<String, _>("id")).collect())
     }
@@ -347,8 +367,8 @@ impl Checkpointer for SQLiteCheckpointer {
 mod tests {
     use super::*;
     use crate::channels::Channel;
-    use crate::runtimes::checkpointer::Checkpoint as CP;
     use crate::runtimes::checkpointer::restore_session_state;
+    use crate::runtimes::checkpointer::Checkpoint as CP;
 
     use crate::state::VersionedState;
     use rustc_hash::FxHashMap;
