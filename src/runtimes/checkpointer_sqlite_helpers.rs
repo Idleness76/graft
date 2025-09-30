@@ -1,5 +1,29 @@
 /*!
-Helper utilities for SQLite checkpointer to reduce code duplication.
+Helper utilities for SQLite checkpointer operations.
+
+This module provides consistent JSON serialization/deserialization helpers
+that standardize error handling and context reporting across the SQLite
+checkpointer implementation. All functions convert serde errors to appropriate
+`CheckpointerError` variants with contextual information.
+
+## Usage
+
+These helpers should be used for all JSON operations in the SQLite checkpointer
+to ensure consistent error handling and debugging information.
+
+```rust,ignore
+// Serialization
+let json_str = serialize_json(&data, "user_data")?;
+
+// Deserialization  
+let data: MyType = deserialize_json(&json_str, "user_data")?;
+
+// Value deserialization
+let data: MyType = deserialize_json_value(json_value, "user_data")?;
+
+// Field validation
+let required_field = require_json_field(optional_field, "state_json")?;
+```
 */
 
 use serde_json::Value;

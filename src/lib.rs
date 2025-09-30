@@ -165,6 +165,3 @@ pub mod state;
 pub mod telemetry;
 pub mod types;
 pub mod utils;
-
-#[cfg(test)]
-mod test_error_persistence;

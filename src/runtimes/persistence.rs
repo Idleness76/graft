@@ -103,6 +103,15 @@ pub struct PersistedCheckpoint {
     pub concurrency_limit: usize,
     /// RFC3339 string form of creation time (keeps chrono::DateTime out of serialized shape).
     pub created_at: String,
+    /// Nodes that executed in this step, encoded as strings
+    #[serde(default)]
+    pub ran_nodes: Vec<String>,
+    /// Nodes that were skipped in this step, encoded as strings
+    #[serde(default)]
+    pub skipped_nodes: Vec<String>,
+    /// Channels that were updated in this step
+    #[serde(default)]
+    pub updated_channels: Vec<String>,
 }
 
 use miette::Diagnostic;
@@ -194,6 +203,9 @@ impl From<&Checkpoint> for PersistedCheckpoint {
             versions_seen: PersistedVersionsSeen(cp.versions_seen.clone()),
             concurrency_limit: cp.concurrency_limit,
             created_at: cp.created_at.to_rfc3339(),
+            ran_nodes: cp.ran_nodes.iter().map(|k| k.encode()).collect(),
+            skipped_nodes: cp.skipped_nodes.iter().map(|k| k.encode()).collect(),
+            updated_channels: cp.updated_channels.clone(),
         }
     }
 }
@@ -204,6 +216,12 @@ impl TryFrom<PersistedCheckpoint> for Checkpoint {
     fn try_from(p: PersistedCheckpoint) -> Result<Self> {
         let state = VersionedState::try_from(p.state)?;
         let frontier: Vec<NodeKind> = p.frontier.iter().map(|s| NodeKind::decode(s)).collect();
+        let ran_nodes: Vec<NodeKind> = p.ran_nodes.iter().map(|s| NodeKind::decode(s)).collect();
+        let skipped_nodes: Vec<NodeKind> = p
+            .skipped_nodes
+            .iter()
+            .map(|s| NodeKind::decode(s))
+            .collect();
         let parsed_dt = chrono::DateTime::parse_from_rfc3339(&p.created_at)
             .map(|dt| dt.with_timezone(&Utc))
             .unwrap_or_else(|_| Utc::now());
@@ -215,6 +233,9 @@ impl TryFrom<PersistedCheckpoint> for Checkpoint {
             versions_seen: p.versions_seen.0,
             concurrency_limit: p.concurrency_limit,
             created_at: parsed_dt,
+            ran_nodes,
+            skipped_nodes,
+            updated_channels: p.updated_channels,
         })
     }
 }
@@ -282,6 +303,9 @@ mod tests {
             ]),
             concurrency_limit: 4,
             created_at: Utc::now(),
+            ran_nodes: vec![NodeKind::Start, NodeKind::Other("X".into())],
+            skipped_nodes: vec![NodeKind::End],
+            updated_channels: vec!["messages".to_string(), "extra".to_string()],
         };
         let persisted = PersistedCheckpoint::from(&cp);
         let json = persisted.to_json_string().unwrap();
@@ -293,6 +317,9 @@ mod tests {
         assert_eq!(cp.frontier.len(), cp2.frontier.len());
         assert_eq!(cp.concurrency_limit, cp2.concurrency_limit);
         assert_eq!(cp.versions_seen, cp2.versions_seen);
+        assert_eq!(cp.ran_nodes, cp2.ran_nodes);
+        assert_eq!(cp.skipped_nodes, cp2.skipped_nodes);
+        assert_eq!(cp.updated_channels, cp2.updated_channels);
     }
 
     #[test]

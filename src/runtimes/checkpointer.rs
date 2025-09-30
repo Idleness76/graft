@@ -22,6 +22,9 @@ use crate::{
 };
 
 /// A durable snapshot of session execution state at a barrier boundary.
+///
+/// This structure captures both the current state and execution history
+/// to enable full session resumption and audit trails.
 #[derive(Debug, Clone)]
 pub struct Checkpoint {
     pub session_id: String,
@@ -31,6 +34,12 @@ pub struct Checkpoint {
     pub versions_seen: FxHashMap<String, FxHashMap<String, u64>>, // scheduler gating
     pub concurrency_limit: usize,
     pub created_at: DateTime<Utc>,
+    /// Nodes that executed in this step (empty for step 0)
+    pub ran_nodes: Vec<NodeKind>,
+    /// Nodes that were skipped in this step (empty for step 0)
+    pub skipped_nodes: Vec<NodeKind>,
+    /// Channels that were updated in this step (empty for step 0)
+    pub updated_channels: Vec<String>,
 }
 
 impl Checkpoint {
@@ -67,6 +76,60 @@ impl Checkpoint {
             versions_seen: session.scheduler_state.versions_seen.clone(),
             concurrency_limit: session.scheduler.concurrency_limit,
             created_at: Utc::now(),
+            ran_nodes: vec![], // No execution history for raw session state
+            skipped_nodes: vec![],
+            updated_channels: vec![],
+        }
+    }
+
+    /// Create a checkpoint from a completed step report.
+    ///
+    /// This captures the full execution context including what nodes ran,
+    /// were skipped, and which channels were updated during the step.
+    ///
+    /// # Parameters
+    ///
+    /// * `session_id` - Unique identifier for the session
+    /// * `session_state` - Current session state after step execution  
+    /// * `step_report` - Details of what happened during step execution
+    ///
+    /// # Returns
+    ///
+    /// A `Checkpoint` with complete step execution metadata
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # use graft::runtimes::{Checkpoint, SessionState, StepReport};
+    /// # fn example(session_state: SessionState, step_report: StepReport) {
+    /// let checkpoint = Checkpoint::from_step_report(
+    ///     "my_session",
+    ///     &session_state,
+    ///     &step_report
+    /// );
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn from_step_report(
+        session_id: &str,
+        session_state: &SessionState,
+        step_report: &crate::runtimes::runner::StepReport,
+    ) -> Self {
+        Self {
+            session_id: session_id.to_string(),
+            step: session_state.step,
+            state: session_state.state.clone(),
+            frontier: session_state.frontier.clone(),
+            versions_seen: session_state.scheduler_state.versions_seen.clone(),
+            concurrency_limit: session_state.scheduler.concurrency_limit,
+            created_at: Utc::now(),
+            ran_nodes: step_report.ran_nodes.clone(),
+            skipped_nodes: step_report.skipped_nodes.clone(),
+            updated_channels: step_report
+                .updated_channels
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect(),
         }
     }
 }
@@ -289,6 +352,8 @@ impl Checkpointer for InMemoryCheckpointer {
 ///
 /// This utility function reconstructs the in-memory session state from a
 /// checkpoint, allowing execution to resume from the checkpointed step.
+/// The restored state maintains all version information and scheduler state
+/// for seamless continuation.
 ///
 /// # Parameters
 ///
@@ -296,7 +361,11 @@ impl Checkpointer for InMemoryCheckpointer {
 ///
 /// # Returns
 ///
-/// A `SessionState` ready for continued execution
+/// A `SessionState` ready for continued execution with:
+/// - Restored versioned state channels (messages, extra)
+/// - Correct step counter and frontier nodes
+/// - Reconstructed scheduler with original concurrency limits
+/// - Preserved version tracking for proper barrier coordination
 ///
 /// # Examples
 ///
@@ -305,9 +374,11 @@ impl Checkpointer for InMemoryCheckpointer {
 /// # async fn example(checkpoint: Checkpoint) {
 /// let session_state = restore_session_state(&checkpoint);
 /// // session_state can now be used to continue execution
+/// assert_eq!(session_state.step, checkpoint.step);
+/// assert_eq!(session_state.frontier, checkpoint.frontier);
 /// # }
 /// ```
-#[must_use]
+#[must_use = "restored session state should be used to continue execution"]
 pub fn restore_session_state(cp: &Checkpoint) -> SessionState {
     use crate::schedulers::Scheduler;
     SessionState {

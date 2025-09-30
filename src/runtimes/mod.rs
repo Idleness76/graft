@@ -43,13 +43,16 @@ mod checkpointer_sqlite_helpers;
 pub mod persistence;
 pub mod runner;
 pub mod runtime_config;
+
+#[cfg(test)]
+mod error_persistence_tests;
 pub mod types;
 
 pub use checkpointer::{
     restore_session_state, Checkpoint, Checkpointer, CheckpointerError, CheckpointerType,
     InMemoryCheckpointer,
 };
-pub use checkpointer_sqlite::SQLiteCheckpointer;
+pub use checkpointer_sqlite::{PageInfo, SQLiteCheckpointer, StepQuery, StepQueryResult};
 pub use persistence::*;
 pub use runner::{
     AppRunner, PausedReason, PausedReport, SessionInit, SessionState, StateVersions, StepOptions,
