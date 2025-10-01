@@ -21,8 +21,5 @@ target
 #.idea/
 
 *.db
-
-
-# Added by cargo
-
+*.env
 /target
