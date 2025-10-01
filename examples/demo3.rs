@@ -537,18 +537,13 @@ async fn demo() -> Result<()> {
         // Display content in chunks for readability
         let content = &final_content.content;
         let chunk_size = 80;
-        for (i, chunk) in content
+        for chunk in content
             .chars()
             .collect::<Vec<_>>()
             .chunks(chunk_size)
-            .enumerate()
         {
             let line: String = chunk.iter().collect();
-            if i == 0 {
-                println!("   {}", line);
-            } else {
-                println!("   {}", line);
-            }
+            println!("   {}", line);
         }
 
         println!("\n   📏 Final content statistics:");

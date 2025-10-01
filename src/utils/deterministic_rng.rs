@@ -264,6 +264,7 @@ mod tests {
         assert!((1..10).contains(&range_val));
 
         let bool_val = rng.random_bool();
-        assert!(bool_val == true || bool_val == false);
+        // Test that random_bool returns without panicking and produces a valid bool
+        assert!(matches!(bool_val, true | false));
     }
 }

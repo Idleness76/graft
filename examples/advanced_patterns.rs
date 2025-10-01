@@ -160,13 +160,12 @@ impl Node for ConditionalRouterNode {
     ) -> Result<NodePartial, NodeError> {
         ctx.emit("routing", "Evaluating routing conditions")?;
 
-        let route_value =
-            snapshot
-                .extra
-                .get(&self.route_key)
-                .ok_or_else(|| NodeError::MissingInput {
-                    what: "routing key not found in state",
-                })?;
+        let route_value = snapshot
+            .extra
+            .get(&self.route_key)
+            .ok_or(NodeError::MissingInput {
+                what: "routing key not found in state",
+            })?;
 
         // Find matching condition
         let mut selected_route = "default".to_string();
@@ -275,25 +274,25 @@ impl Node for DataTransformerNode {
                         TransformOperation::Uppercase => source_value
                             .as_str()
                             .map(|s| json!(s.to_uppercase()))
-                            .unwrap_or_else(|| json!(null)),
+                            .unwrap_or(json!(null)),
                         TransformOperation::Lowercase => source_value
                             .as_str()
                             .map(|s| json!(s.to_lowercase()))
-                            .unwrap_or_else(|| json!(null)),
+                            .unwrap_or(json!(null)),
                         TransformOperation::Reverse => source_value
                             .as_str()
                             .map(|s| json!(s.chars().rev().collect::<String>()))
-                            .unwrap_or_else(|| json!(null)),
+                            .unwrap_or(json!(null)),
                         TransformOperation::Length => source_value
                             .as_str()
                             .map(|s| json!(s.len()))
                             .or_else(|| source_value.as_array().map(|a| json!(a.len())))
-                            .unwrap_or_else(|| json!(null)),
+                            .unwrap_or(json!(null)),
                         TransformOperation::Multiply(factor) => source_value
                             .as_i64()
                             .map(|n| json!(n * factor))
                             .or_else(|| source_value.as_f64().map(|n| json!(n * (*factor as f64))))
-                            .unwrap_or_else(|| json!(null)),
+                            .unwrap_or(json!(null)),
                         TransformOperation::JsonPath(_path) => {
                             // Simplified JSONPath-like operation
                             json!(format!("jsonpath_result_for_{}", rule.source_key))

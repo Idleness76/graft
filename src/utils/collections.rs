@@ -538,15 +538,15 @@ impl ExtraMapExt for FxHashMap<String, Value> {
     /// and the expected type string. It's optimized to avoid cloning or deserializing
     /// the actual value, making it suitable for validation scenarios.
     fn has_typed(&self, key: &str, expected_type: &str) -> bool {
-        match (self.get(key), expected_type) {
-            (Some(Value::String(_)), "string") => true,
-            (Some(Value::Number(_)), "number") => true,
-            (Some(Value::Bool(_)), "bool") => true,
-            (Some(Value::Array(_)), "array") => true,
-            (Some(Value::Object(_)), "object") => true,
-            (Some(Value::Null), "null") => true,
-            _ => false,
-        }
+        matches!(
+            (self.get(key), expected_type),
+            (Some(Value::String(_)), "string")
+                | (Some(Value::Number(_)), "number")
+                | (Some(Value::Bool(_)), "bool")
+                | (Some(Value::Array(_)), "array")
+                | (Some(Value::Object(_)), "object")
+                | (Some(Value::Null), "null")
+        )
     }
 }
 
@@ -763,7 +763,7 @@ mod tests {
         assert_eq!(map.len(), 3);
         assert_eq!(map.get_string("name").unwrap(), "test");
         assert_eq!(map.get_number("count").unwrap(), 42.into());
-        assert_eq!(map.get_bool("enabled").unwrap(), true);
+        assert!(map.get_bool("enabled").unwrap());
     }
 
     #[test]
