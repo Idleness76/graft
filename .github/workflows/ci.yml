@@ -33,6 +33,18 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@stable
-    - run: cargo publish
+    - name: Verify tag matches Cargo.toml version
+      run: |
+        TAG_VERSION=${GITHUB_REF##*/}
+        TAG_VERSION=${TAG_VERSION#v}
+        CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d '"' -f2)
+        echo "Tag version:    $TAG_VERSION"
+        echo "Cargo version:  $CARGO_VERSION"
+        if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+          echo "Version mismatch. Expected tag v$CARGO_VERSION" >&2
+          exit 1
+        fi
+    - name: Publish
       env:
-        CARGO_WEAVEGRAPH: ${{ secrets.CARGO_WEAVEGRAPH }}
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_WEAVEGRAPH }}
+      run: cargo publish --no-verify
