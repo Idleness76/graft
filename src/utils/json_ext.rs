@@ -556,7 +556,7 @@ mod tests {
 
     #[test]
     fn test_merge_multiple() {
-        let values = vec![json!({"a": 1}), json!({"b": 2}), json!({"c": 3})];
+        let values = [json!({"a": 1}), json!({"b": 2}), json!({"c": 3})];
 
         let merged = merge_multiple(values.iter(), MergeStrategy::DeepMerge).unwrap();
         let expected = json!({"a": 1, "b": 2, "c": 3});

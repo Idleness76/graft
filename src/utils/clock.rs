@@ -277,10 +277,7 @@ mod tests {
         let system_time = clock.now_system_time();
 
         // Should be roughly the same time
-        let system_timestamp = system_time
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let system_timestamp = system_time.duration_since(UNIX_EPOCH).unwrap().as_secs();
         assert!((now as i64 - system_timestamp as i64).abs() < 2);
 
         // DateTime should also be close

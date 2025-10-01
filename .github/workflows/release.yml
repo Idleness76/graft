@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0)'
+        required: true
+        type: string
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Validate version format
+      run: |
+        if ! echo "${{ github.event.inputs.version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$'; then
+          echo "Error: Invalid version format. Use semantic versioning (e.g., 1.0.0, 1.0.0-beta.1)"
+          exit 1
+        fi
+
+    - name: Check if version exists
+      run: |
+        if git tag | grep -q "^v${{ github.event.inputs.version }}$"; then
+          echo "Error: Tag v${{ github.event.inputs.version }} already exists"
+          exit 1
+        fi
+
+    - name: Update Cargo.toml version
+      run: |
+        sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' Cargo.toml
+        echo "Updated Cargo.toml version to ${{ github.event.inputs.version }}"
+
+    - name: Generate changelog entry
+      id: changelog
+      run: |
+        # Extract changes since last tag
+        LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        if [ -z "$LAST_TAG" ]; then
+          CHANGES=$(git log --oneline --pretty=format:"- %s" HEAD)
+        else
+          CHANGES=$(git log --oneline --pretty=format:"- %s" ${LAST_TAG}..HEAD)
+        fi
+        
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        echo "## What's Changed" >> $GITHUB_OUTPUT
+        echo "" >> $GITHUB_OUTPUT
+        echo "$CHANGES" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Commit version bump
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add Cargo.toml
+        git commit -m "chore: bump version to ${{ github.event.inputs.version }}"
+        git push
+
+    - name: Create and push tag
+      run: |
+        git tag v${{ github.event.inputs.version }}
+        git push origin v${{ github.event.inputs.version }}
+
+    - name: Create GitHub release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ github.event.inputs.version }}
+        release_name: v${{ github.event.inputs.version }}
+        body: ${{ steps.changelog.outputs.changelog }}
+        draft: false
+        prerelease: ${{ contains(github.event.inputs.version, '-') }}

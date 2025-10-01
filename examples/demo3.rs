@@ -1,6 +1,6 @@
 //! Demo 3: LLM Integration with Modern Runtime Configuration
 //!
-//! This demonstration showcases integration of Large Language Models (LLMs) with 
+//! This demonstration showcases integration of Large Language Models (LLMs) with
 //! the Weavegraph workflow framework, featuring modern runtime configuration patterns,
 //! persistent checkpointing, and conditional execution flows. This demo builds on
 //! the previous examples while introducing real-world AI agent patterns.
@@ -27,13 +27,6 @@
 //! cargo run --example demo3
 //! ```
 
-use weavegraph::channels::{Channel, errors::pretty_print};
-use weavegraph::graph::GraphBuilder;
-use weavegraph::message::Message;
-use weavegraph::node::{Node, NodeContext, NodeError, NodePartial};
-use weavegraph::runtimes::{CheckpointerType, RuntimeConfig};
-use weavegraph::state::{StateSnapshot, VersionedState};
-use weavegraph::types::NodeKind;
 use async_trait::async_trait;
 use miette::Result;
 use rig::client::CompletionClient;
@@ -43,6 +36,13 @@ use rustc_hash::FxHashMap;
 use serde_json::json;
 use std::sync::Arc;
 use tracing::instrument;
+use weavegraph::channels::{errors::pretty_print, Channel};
+use weavegraph::graph::GraphBuilder;
+use weavegraph::message::Message;
+use weavegraph::node::{Node, NodeContext, NodeError, NodePartial};
+use weavegraph::runtimes::{CheckpointerType, RuntimeConfig};
+use weavegraph::state::{StateSnapshot, VersionedState};
+use weavegraph::types::NodeKind;
 
 /// First-stage LLM node that generates initial content based on user input.
 ///
@@ -65,14 +65,16 @@ impl Node for ContentGeneratorNode {
         ctx.emit("llm_start", "Starting content generation with Ollama")?;
 
         // Extract user input (should be the first/last user message)
-        let user_prompt = snapshot.messages
-            .iter()
-            .find(|msg| msg.is_user())
-            .ok_or(NodeError::MissingInput {
-                what: "user_prompt",
-            })?;
+        let user_prompt =
+            snapshot
+                .messages
+                .iter()
+                .find(|msg| msg.is_user())
+                .ok_or(NodeError::MissingInput {
+                    what: "user_prompt",
+                })?;
 
-        ctx.emit("llm_input", &format!("User prompt: {}", user_prompt.content))?;
+        ctx.emit("llm_input", format!("User prompt: {}", user_prompt.content))?;
 
         // Initialize Ollama client with modern patterns
         let client = ollama::Client::new();
@@ -96,10 +98,14 @@ impl Node for ContentGeneratorNode {
                 message: format!("Content generation failed: {}", e),
             })?;
 
-        ctx.emit("llm_response", &format!("Generated {} response choices", response.choice.len()))?;
+        ctx.emit(
+            "llm_response",
+            format!("Generated {} response choices", response.choice.len()),
+        )?;
 
         // ✅ MODERN: Use convenience constructor for response message
-        let response_content = response.choice
+        let response_content = response
+            .choice
             .into_iter()
             .map(|choice| format!("{:?}", choice))
             .collect::<Vec<_>>()
@@ -144,32 +150,40 @@ impl Node for ContentEnhancerNode {
     ) -> Result<NodePartial, NodeError> {
         // Get current iteration count
         let current_iterations = serde_json::from_value::<i32>(
-            snapshot.extra
+            snapshot
+                .extra
                 .get("enhancement_iterations")
                 .unwrap_or(&json!(0))
                 .clone(),
         )
         .map_err(NodeError::from)?;
 
-        ctx.emit("enhance_start", &format!(
-            "Starting enhancement iteration {} with {} messages",
-            current_iterations + 1,
-            snapshot.messages.len()
-        ))?;
+        ctx.emit(
+            "enhance_start",
+            format!(
+                "Starting enhancement iteration {} with {} messages",
+                current_iterations + 1,
+                snapshot.messages.len()
+            ),
+        )?;
 
         // Get the most recent assistant message to enhance
-        let previous_content = snapshot.messages
+        let previous_content = snapshot
+            .messages
             .iter()
             .filter(|msg| msg.is_assistant())
-            .last()
+            .next_back()
             .ok_or(NodeError::MissingInput {
                 what: "previous_assistant_content",
             })?;
 
-        ctx.emit("enhance_input", &format!(
-            "Enhancing content (length: {} chars)", 
-            previous_content.content.len()
-        ))?;
+        ctx.emit(
+            "enhance_input",
+            format!(
+                "Enhancing content (length: {} chars)",
+                previous_content.content.len()
+            ),
+        )?;
 
         // Initialize LLM client
         let client = ollama::Client::new();
@@ -198,7 +212,8 @@ impl Node for ContentEnhancerNode {
             })?;
 
         // ✅ MODERN: Use convenience constructor
-        let enhanced_content = response.choice
+        let enhanced_content = response
+            .choice
             .into_iter()
             .map(|choice| format!("{:?}", choice))
             .collect::<Vec<_>>()
@@ -208,21 +223,34 @@ impl Node for ContentEnhancerNode {
 
         // Update iteration tracking and metadata
         let mut extra_data = FxHashMap::default();
-        extra_data.insert("enhancement_iterations".into(), json!(current_iterations + 1));
+        extra_data.insert(
+            "enhancement_iterations".into(),
+            json!(current_iterations + 1),
+        );
         extra_data.insert("enhancement_stage".into(), json!("enhanced"));
         extra_data.insert("model_used".into(), json!("gemma3"));
         extra_data.insert("temperature".into(), json!(0.6));
-        extra_data.insert("enhanced_content_length".into(), json!(enhanced_content.len()));
-        extra_data.insert("original_content_length".into(), json!(previous_content.content.len()));
-        extra_data.insert("content_growth_ratio".into(), json!(
-            enhanced_content.len() as f64 / previous_content.content.len() as f64
-        ));
+        extra_data.insert(
+            "enhanced_content_length".into(),
+            json!(enhanced_content.len()),
+        );
+        extra_data.insert(
+            "original_content_length".into(),
+            json!(previous_content.content.len()),
+        );
+        extra_data.insert(
+            "content_growth_ratio".into(),
+            json!(enhanced_content.len() as f64 / previous_content.content.len() as f64),
+        );
 
-        ctx.emit("enhance_complete", &format!(
-            "Enhancement completed. Iteration: {}, Growth: {:.1}x",
-            current_iterations + 1,
-            enhanced_content.len() as f64 / previous_content.content.len() as f64
-        ))?;
+        ctx.emit(
+            "enhance_complete",
+            format!(
+                "Enhancement completed. Iteration: {}, Growth: {:.1}x",
+                current_iterations + 1,
+                enhanced_content.len() as f64 / previous_content.content.len() as f64
+            ),
+        )?;
 
         Ok(NodePartial {
             messages: Some(vec![enhanced_message]),
@@ -281,22 +309,31 @@ async fn demo() -> Result<()> {
         .with_extra("workflow_type", json!("llm_content_generation"))
         .with_extra("target_iterations", json!(2))
         .with_extra("enhancement_iterations", json!(0))
-        .with_extra("model_config", json!({
-            "generator_model": "gemma3:270m",
-            "enhancer_model": "gemma3",
-            "generator_temperature": 0.7,
-            "enhancer_temperature": 0.6
-        }))
-        .with_extra("quality_metrics", json!({
-            "track_content_growth": true,
-            "track_iteration_timing": true,
-            "track_model_performance": true
-        }))
+        .with_extra(
+            "model_config",
+            json!({
+                "generator_model": "gemma3:270m",
+                "enhancer_model": "gemma3",
+                "generator_temperature": 0.7,
+                "enhancer_temperature": 0.6
+            }),
+        )
+        .with_extra(
+            "quality_metrics",
+            json!({
+                "track_content_growth": true,
+                "track_iteration_timing": true,
+                "track_model_performance": true
+            }),
+        )
         .build();
 
     println!("   ✓ LLM workflow state initialized");
     println!("   ✓ User topic: {}", init.messages.snapshot()[0].content);
-    println!("   ✓ Target iterations: {}", init.extra.snapshot()["target_iterations"]);
+    println!(
+        "   ✓ Target iterations: {}",
+        init.extra.snapshot()["target_iterations"]
+    );
 
     // ✅ STEP 2: Modern Runtime Configuration with Persistence
     println!("\n⚙️  Step 2: Configuring runtime with SQLite checkpointing");
@@ -316,12 +353,21 @@ async fn demo() -> Result<()> {
     println!("\n🔗 Step 3: Building LLM workflow with conditional enhancement loop");
 
     let app = GraphBuilder::new()
-        .add_node(NodeKind::Other("ContentGenerator".into()), ContentGeneratorNode)
-        .add_node(NodeKind::Other("ContentEnhancer".into()), ContentEnhancerNode)
+        .add_node(
+            NodeKind::Other("ContentGenerator".into()),
+            ContentGeneratorNode,
+        )
+        .add_node(
+            NodeKind::Other("ContentEnhancer".into()),
+            ContentEnhancerNode,
+        )
         // Start flows to content generator
         .add_edge(NodeKind::Start, NodeKind::Other("ContentGenerator".into()))
         // Generator flows to enhancer
-        .add_edge(NodeKind::Other("ContentGenerator".into()), NodeKind::Other("ContentEnhancer".into()))
+        .add_edge(
+            NodeKind::Other("ContentGenerator".into()),
+            NodeKind::Other("ContentEnhancer".into()),
+        )
         // Conditional edge: enhancer loops back to itself or goes to end
         .add_conditional_edge(
             NodeKind::Other("ContentEnhancer".into()),
@@ -330,18 +376,22 @@ async fn demo() -> Result<()> {
             Arc::new(|snapshot: StateSnapshot| {
                 // Continue enhancing if we haven't reached target iterations
                 let current_iterations = serde_json::from_value::<i32>(
-                    snapshot.extra
+                    snapshot
+                        .extra
                         .get("enhancement_iterations")
                         .unwrap_or(&json!(0))
                         .clone(),
-                ).unwrap_or(0);
-                
+                )
+                .unwrap_or(0);
+
                 let target_iterations = serde_json::from_value::<i32>(
-                    snapshot.extra
+                    snapshot
+                        .extra
                         .get("target_iterations")
                         .unwrap_or(&json!(2))
                         .clone(),
-                ).unwrap_or(2);
+                )
+                .unwrap_or(2);
 
                 // Return true to continue to End, false to loop back to enhancer
                 current_iterations >= target_iterations
@@ -362,34 +412,50 @@ async fn demo() -> Result<()> {
     println!("   📡 Note: This will make actual calls to Ollama - ensure it's running!");
 
     let execution_start = std::time::Instant::now();
-    
-    let final_state = app.invoke(init).await.map_err(|e| {
-        miette::miette!("LLM workflow execution failed: {e}")
-    })?;
-    
+
+    let final_state = app
+        .invoke(init)
+        .await
+        .map_err(|e| miette::miette!("LLM workflow execution failed: {e}"))?;
+
     let execution_duration = execution_start.elapsed();
-    
+
     println!("   ✅ LLM workflow completed successfully");
-    println!("   ⏱️  Total execution time: {:.2}s", execution_duration.as_secs_f64());
+    println!(
+        "   ⏱️  Total execution time: {:.2}s",
+        execution_duration.as_secs_f64()
+    );
 
     // ✅ STEP 5: Analyze Results and Content Evolution
     println!("\n📊 Step 5: Analyzing content generation results");
 
     let final_snapshot = final_state.snapshot();
-    
+
     println!("   📈 Workflow Statistics:");
     println!("      • Total messages: {}", final_snapshot.messages.len());
-    println!("      • Messages version: {}", final_snapshot.messages_version);
+    println!(
+        "      • Messages version: {}",
+        final_snapshot.messages_version
+    );
     println!("      • Extra data entries: {}", final_snapshot.extra.len());
-    println!("      • Final iterations: {}", 
-             final_snapshot.extra.get("enhancement_iterations").unwrap_or(&json!(0)));
+    println!(
+        "      • Final iterations: {}",
+        final_snapshot
+            .extra
+            .get("enhancement_iterations")
+            .unwrap_or(&json!(0))
+    );
 
     // Display content evolution
     println!("\n   📝 Content Evolution Timeline:");
-    let user_messages: Vec<_> = final_snapshot.messages.iter()
+    let user_messages: Vec<_> = final_snapshot
+        .messages
+        .iter()
         .filter(|msg| msg.is_user())
         .collect();
-    let assistant_messages: Vec<_> = final_snapshot.messages.iter()
+    let assistant_messages: Vec<_> = final_snapshot
+        .messages
+        .iter()
         .filter(|msg| msg.is_assistant())
         .collect();
 
@@ -412,8 +478,10 @@ async fn demo() -> Result<()> {
     // Display performance metrics
     if let Some(metrics) = final_snapshot.extra.get("content_growth_ratio") {
         println!("\n   📊 Content Quality Metrics:");
-        println!("      • Content growth ratio: {:.2}x", 
-                 metrics.as_f64().unwrap_or(1.0));
+        println!(
+            "      • Content growth ratio: {:.2}x",
+            metrics.as_f64().unwrap_or(1.0)
+        );
     }
 
     // Show model usage statistics
@@ -422,19 +490,28 @@ async fn demo() -> Result<()> {
     let enhancer_calls = assistant_messages.len().saturating_sub(1);
     println!("      • Generator calls (gemma3:270m): {}", generator_calls);
     println!("      • Enhancer calls (gemma3): {}", enhancer_calls);
-    println!("      • Total LLM calls: {}", generator_calls + enhancer_calls);
+    println!(
+        "      • Total LLM calls: {}",
+        generator_calls + enhancer_calls
+    );
 
     // ✅ STEP 6: Persistence and Checkpoint Analysis
     println!("\n💾 Step 6: Checkpoint persistence analysis");
-    
-    println!("   ✓ State persisted to SQLite database: {:?}", 
-             app.runtime_config().sqlite_db_name
-                 .as_ref()
-                 .unwrap_or(&"weavegraph.db".to_string()));
-    println!("   ✓ Session ID: {:?}", 
-             app.runtime_config().session_id
-                 .as_ref()
-                 .unwrap_or(&"default".to_string()));
+
+    println!(
+        "   ✓ State persisted to SQLite database: {:?}",
+        app.runtime_config()
+            .sqlite_db_name
+            .as_ref()
+            .unwrap_or(&"weavegraph.db".to_string())
+    );
+    println!(
+        "   ✓ Session ID: {:?}",
+        app.runtime_config()
+            .session_id
+            .as_ref()
+            .unwrap_or(&"default".to_string())
+    );
     println!("   ✓ Workflow resumable from any checkpoint");
 
     // Check for errors
@@ -448,27 +525,26 @@ async fn demo() -> Result<()> {
 
     // ✅ STEP 7: Final Content Display
     println!("\n📋 Step 7: Final enhanced content");
-    
+
     if let Some(final_content) = assistant_messages.last() {
         println!("   ╭─────────────────────────────────────────────────────────╮");
         println!("   │                    FINAL CONTENT                        │");
         println!("   ╰─────────────────────────────────────────────────────────╯");
-        
+
         // Display content in chunks for readability
         let content = &final_content.content;
         let chunk_size = 80;
-        for (i, chunk) in content.chars().collect::<Vec<_>>().chunks(chunk_size).enumerate() {
+        for chunk in content.chars().collect::<Vec<_>>().chunks(chunk_size) {
             let line: String = chunk.iter().collect();
-            if i == 0 {
-                println!("   {}", line);
-            } else {
-                println!("   {}", line);
-            }
+            println!("   {}", line);
         }
-        
+
         println!("\n   📏 Final content statistics:");
         println!("      • Character count: {}", content.len());
-        println!("      • Estimated word count: {}", content.split_whitespace().count());
+        println!(
+            "      • Estimated word count: {}",
+            content.split_whitespace().count()
+        );
         println!("      • Line count: {}", content.lines().count());
     }
 

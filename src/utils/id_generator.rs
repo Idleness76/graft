@@ -25,7 +25,7 @@ pub enum IdError {
 }
 
 /// Configuration for ID generation behavior.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct IdConfig {
     /// Random seed for deterministic ID generation (optional).
     pub seed: Option<u64>,
@@ -35,17 +35,6 @@ pub struct IdConfig {
     pub include_timestamp: bool,
     /// Counter for sequential ID generation.
     pub use_counter: bool,
-}
-
-impl Default for IdConfig {
-    fn default() -> Self {
-        Self {
-            seed: None,
-            prefix: None,
-            include_timestamp: false,
-            use_counter: false,
-        }
-    }
 }
 
 impl fmt::Display for IdConfig {

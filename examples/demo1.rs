@@ -17,16 +17,15 @@
 //! ```
 
 use async_trait::async_trait;
+use miette::Result;
+use rustc_hash::FxHashMap;
+use serde_json::json;
 use weavegraph::channels::Channel;
 use weavegraph::graph::GraphBuilder;
 use weavegraph::message::Message;
 use weavegraph::node::{Node, NodeContext, NodeError, NodePartial};
 use weavegraph::state::{StateSnapshot, VersionedState};
 use weavegraph::types::NodeKind;
-use miette::Result;
-use rustc_hash::FxHashMap;
-use serde_json::json;
-use tokio;
 
 /// Simple demonstration node that adds an assistant message.
 ///
@@ -57,7 +56,7 @@ impl Node for SimpleNode {
         // Emit a progress event (modern pattern)
         ctx.emit(
             "node_execution",
-            &format!("Node {} starting execution", self.name),
+            format!("Node {} starting execution", self.name),
         )?;
 
         // Get the last message to process (if any)
@@ -72,7 +71,7 @@ impl Node for SimpleNode {
 
         ctx.emit(
             "node_completion",
-            &format!("Node {} completed successfully", self.name),
+            format!("Node {} completed successfully", self.name),
         )?;
 
         Ok(NodePartial {

@@ -21,7 +21,7 @@ use std::collections::HashMap;
 ///
 /// let mut rng = DeterministicRng::new(42);
 /// let value1 = rng.random_u64();
-/// 
+///
 /// // Same seed produces same sequence
 /// let mut rng2 = DeterministicRng::new(42);
 /// let value2 = rng2.random_u64();
@@ -185,9 +185,9 @@ impl RngRegistry {
     pub fn get_rng(&mut self, name: &str) -> &mut DeterministicRng {
         self.rngs.entry(name.to_string()).or_insert_with(|| {
             // Create deterministic seed from name and base seed
-            let name_hash = name.bytes().fold(0u64, |acc, b| {
-                acc.wrapping_mul(31).wrapping_add(b as u64)
-            });
+            let name_hash = name
+                .bytes()
+                .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
             let derived_seed = self.base_seed.wrapping_add(name_hash);
             DeterministicRng::new(derived_seed)
         })
@@ -264,6 +264,7 @@ mod tests {
         assert!((1..10).contains(&range_val));
 
         let bool_val = rng.random_bool();
-        assert!(bool_val == true || bool_val == false);
+        // Test that random_bool returns without panicking and produces a valid bool
+        assert!(matches!(bool_val, true | false));
     }
 }

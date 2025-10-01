@@ -1,5 +1,5 @@
-use super::ErrorsChannel;
 use super::errors::*;
+use super::ErrorsChannel;
 use crate::channels::Channel;
 use crate::types::ChannelType;
 use chrono::{TimeZone, Utc};

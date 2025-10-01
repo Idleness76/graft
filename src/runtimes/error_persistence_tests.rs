@@ -633,7 +633,7 @@ async fn test_error_filtering_by_execution_metadata() {
                 kind: node_name.to_string(),
                 step,
             },
-            error: LadderError::msg(&format!("Error in {node_name} at step {step}")),
+            error: LadderError::msg(format!("Error in {node_name} at step {step}")),
             tags: vec![node_name.to_lowercase()],
             context: serde_json::json!({"step": step, "node": node_name}),
         };

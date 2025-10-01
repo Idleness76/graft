@@ -12,16 +12,16 @@
 //! providing efficient concurrent execution while respecting the dependency graph.
 
 use async_trait::async_trait;
+use rustc_hash::FxHashMap;
+use serde_json::json;
+use std::time::Duration;
+use tokio::time::sleep;
 use weavegraph::channels::Channel;
 use weavegraph::graph::GraphBuilder;
 use weavegraph::message::Message;
 use weavegraph::node::{Node, NodeContext, NodeError, NodePartial};
 use weavegraph::state::{StateSnapshot, VersionedState};
 use weavegraph::types::NodeKind;
-use rustc_hash::FxHashMap;
-use serde_json::json;
-use std::time::Duration;
-use tokio::time::sleep;
 
 /// A demonstration node that simulates variable execution time
 /// to showcase scheduler behavior with dependencies
@@ -50,7 +50,7 @@ impl Node for SchedulerDemoNode {
         // Emit execution start event
         ctx.emit(
             "scheduler_node_start",
-            &format!(
+            format!(
                 "Node {} starting execution ({}ms)",
                 self.name, self.execution_time_ms
             ),
@@ -76,7 +76,7 @@ impl Node for SchedulerDemoNode {
             "Analyzer" => format!("📊 Analysis complete: Processed '{}'", input_msg),
             "ProcessorA" => format!("⚙️ ProcessorA: Transformed '{}'", input_msg),
             "ProcessorB" => format!("⚙️ ProcessorB: Enhanced '{}'", input_msg),
-            "Synthesizer" => format!("🔄 Synthesis: Combined all inputs into final result"),
+            "Synthesizer" => "🔄 Synthesis: Combined all inputs into final result".to_string(),
             "End" => "✅ Workflow completed successfully".to_string(),
             _ => format!("🔄 [{}] Processed: {}", self.name, input_msg),
         };
@@ -89,7 +89,7 @@ impl Node for SchedulerDemoNode {
         // Emit completion event
         ctx.emit(
             "scheduler_node_complete",
-            &format!(
+            format!(
                 "Node {} completed after {}ms",
                 self.name, self.execution_time_ms
             ),
