@@ -123,14 +123,8 @@ impl Node for RichNode {
 
         let extra = if self.produce_extra {
             let mut map = FxHashMap::default();
-            map.insert(
-                format!("{}_executed", self.name),
-                json!(true),
-            );
-            map.insert(
-                "step".to_string(),
-                json!(ctx.step),
-            );
+            map.insert(format!("{}_executed", self.name), json!(true));
+            map.insert("step".to_string(), json!(ctx.step));
             Some(map)
         } else {
             None
@@ -180,7 +174,7 @@ pub fn make_delayed_registry() -> FxHashMap<NodeKind, Arc<dyn Node>> {
     registry.insert(
         NodeKind::Other("B".into()),
         Arc::new(DelayedNode {
-            name: "B", 
+            name: "B",
             delay_ms: 1,
         }) as Arc<dyn Node>,
     );

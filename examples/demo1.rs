@@ -17,16 +17,16 @@
 //! ```
 
 use async_trait::async_trait;
+use miette::Result;
+use rustc_hash::FxHashMap;
+use serde_json::json;
+use tokio;
 use weavegraph::channels::Channel;
 use weavegraph::graph::GraphBuilder;
 use weavegraph::message::Message;
 use weavegraph::node::{Node, NodeContext, NodeError, NodePartial};
 use weavegraph::state::{StateSnapshot, VersionedState};
 use weavegraph::types::NodeKind;
-use miette::Result;
-use rustc_hash::FxHashMap;
-use serde_json::json;
-use tokio;
 
 /// Simple demonstration node that adds an assistant message.
 ///

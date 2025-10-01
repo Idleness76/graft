@@ -12,16 +12,16 @@
 //! providing efficient concurrent execution while respecting the dependency graph.
 
 use async_trait::async_trait;
+use rustc_hash::FxHashMap;
+use serde_json::json;
+use std::time::Duration;
+use tokio::time::sleep;
 use weavegraph::channels::Channel;
 use weavegraph::graph::GraphBuilder;
 use weavegraph::message::Message;
 use weavegraph::node::{Node, NodeContext, NodeError, NodePartial};
 use weavegraph::state::{StateSnapshot, VersionedState};
 use weavegraph::types::NodeKind;
-use rustc_hash::FxHashMap;
-use serde_json::json;
-use std::time::Duration;
-use tokio::time::sleep;
 
 /// A demonstration node that simulates variable execution time
 /// to showcase scheduler behavior with dependencies

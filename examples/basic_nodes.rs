@@ -9,12 +9,12 @@
 //! Run with: `cargo run --example basic_nodes`
 
 use async_trait::async_trait;
+use serde_json::json;
 use weavegraph::event_bus::EventBus;
 use weavegraph::message::Message;
 use weavegraph::node::{Node, NodeContext, NodeError, NodePartial};
 use weavegraph::state::StateSnapshot;
 use weavegraph::utils::collections::new_extra_map;
-use serde_json::json;
 
 /// A simple message processing node that counts and logs messages.
 ///
