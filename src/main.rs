@@ -1,5 +1,5 @@
 // Demo modules are currently commented out
-// use graft::{run_demo1, run_demo2, run_demo3, run_demo4};
+// use weavegraph::{run_demo1, run_demo2, run_demo3, run_demo4};
 use miette::Result;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -14,7 +14,7 @@ fn init_tracing() {
         .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE);
 
     let filter = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("error,graft=error"))
+        .or_else(|_| EnvFilter::try_new("error,weavegraph=error"))
         .unwrap();
 
     tracing_subscriber::registry()

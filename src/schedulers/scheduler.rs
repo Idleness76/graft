@@ -1,6 +1,6 @@
 //! Frontier-based scheduler with version gating and bounded concurrency.
 //!
-//! This module provides the core scheduling logic for the Graft workflow framework.
+//! This module provides the core scheduling logic for the Weavegraph workflow framework.
 //! The scheduler manages concurrent execution of nodes while ensuring version-based
 //! consistency and preventing unnecessary re-execution through intelligent gating.
 //!
@@ -14,10 +14,10 @@
 //! # Examples
 //!
 //! ```rust
-//! use graft::schedulers::{Scheduler, SchedulerState};
-//! use graft::state::StateSnapshot;
-//! use graft::types::NodeKind;
-//! use graft::event_bus::EventBus;
+//! use weavegraph::schedulers::{Scheduler, SchedulerState};
+//! use weavegraph::state::StateSnapshot;
+//! use weavegraph::types::NodeKind;
+//! use weavegraph::event_bus::EventBus;
 //! use rustc_hash::FxHashMap;
 //! use std::sync::Arc;
 //!
@@ -71,8 +71,8 @@ use tracing::instrument;
 /// # Examples
 ///
 /// ```rust
-/// use graft::schedulers::StepRunResult;
-/// use graft::types::NodeKind;
+/// use weavegraph::schedulers::StepRunResult;
+/// use weavegraph::types::NodeKind;
 ///
 /// fn analyze_step_result(result: &StepRunResult) {
 ///     println!("Executed {} nodes, skipped {}",
@@ -113,8 +113,8 @@ pub struct StepRunResult {
 /// # Examples
 ///
 /// ```rust
-/// use graft::schedulers::{Scheduler, SchedulerState};
-/// use graft::state::StateSnapshot;
+/// use weavegraph::schedulers::{Scheduler, SchedulerState};
+/// use weavegraph::state::StateSnapshot;
 /// use rustc_hash::FxHashMap;
 ///
 /// let mut state = SchedulerState::default();
@@ -167,7 +167,7 @@ pub struct SchedulerState {
 /// # Examples
 ///
 /// ```rust
-/// use graft::schedulers::Scheduler;
+/// use weavegraph::schedulers::Scheduler;
 ///
 /// // Create scheduler with specific concurrency limit
 /// let scheduler = Scheduler::new(8); // Max 8 concurrent nodes
@@ -198,9 +198,9 @@ pub struct Scheduler {
 /// # Examples
 ///
 /// ```rust
-/// use graft::schedulers::SchedulerError;
-/// use graft::node::NodeError;
-/// use graft::types::NodeKind;
+/// use weavegraph::schedulers::SchedulerError;
+/// use weavegraph::node::NodeError;
+/// use weavegraph::types::NodeKind;
 ///
 /// fn handle_scheduler_error(error: SchedulerError) {
 ///     match error {
@@ -228,7 +228,7 @@ pub enum SchedulerError {
     /// - `step`: The workflow step number when the failure occurred  
     /// - `source`: The underlying `NodeError` that caused the failure
     #[error("node run error at step {step} for {kind:?}: {source}")]
-    #[diagnostic(code(graft::scheduler::node))]
+    #[diagnostic(code(weavegraph::scheduler::node))]
     NodeRun {
         kind: NodeKind,
         step: u64,
@@ -247,7 +247,7 @@ pub enum SchedulerError {
     /// - Runtime shutdown during execution
     /// - Task cancellation due to timeout or external signal
     #[error("task join error: {0}")]
-    #[diagnostic(code(graft::scheduler::join))]
+    #[diagnostic(code(weavegraph::scheduler::join))]
     Join(#[from] tokio::task::JoinError),
 }
 
@@ -350,8 +350,8 @@ impl Scheduler {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::schedulers::{Scheduler, SchedulerState};
-    /// use graft::state::StateSnapshot;
+    /// use weavegraph::schedulers::{Scheduler, SchedulerState};
+    /// use weavegraph::state::StateSnapshot;
     /// use rustc_hash::FxHashMap;
     ///
     /// let scheduler = Scheduler::new(2);
@@ -394,7 +394,7 @@ impl Scheduler {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::schedulers::{Scheduler, SchedulerState};
+    /// use weavegraph::schedulers::{Scheduler, SchedulerState};
     ///
     /// let scheduler = Scheduler::new(2);
     /// let mut state = SchedulerState::default();
@@ -463,10 +463,10 @@ impl Scheduler {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::schedulers::{Scheduler, SchedulerState};
-    /// use graft::state::StateSnapshot;
-    /// use graft::types::NodeKind;
-    /// use graft::event_bus::EventBus;
+    /// use weavegraph::schedulers::{Scheduler, SchedulerState};
+    /// use weavegraph::state::StateSnapshot;
+    /// use weavegraph::types::NodeKind;
+    /// use weavegraph::event_bus::EventBus;
     /// use rustc_hash::FxHashMap;
     /// use std::sync::Arc;
     ///

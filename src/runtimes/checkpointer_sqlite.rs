@@ -112,31 +112,31 @@ pub struct StepQueryResult {
 pub enum SqliteCheckpointerError {
     #[error("SQLx error: {0}")]
     #[diagnostic(
-        code(graft::sqlite::sqlx),
+        code(weavegraph::sqlite::sqlx),
         help("Ensure the SQLite database URL is valid and accessible.")
     )]
     Sqlx(#[from] sqlx::Error),
 
     #[error("JSON serialization error: {0}")]
     #[diagnostic(
-        code(graft::sqlite::serde),
+        code(weavegraph::sqlite::serde),
         help("Check serialized shapes for state/frontier/versions_seen.")
     )]
     Serde(#[from] serde_json::Error),
 
     #[error("Missing persisted field: {0}")]
     #[diagnostic(
-        code(graft::sqlite::missing),
+        code(weavegraph::sqlite::missing),
         help("Backfill or re-run migrations to populate the missing field.")
     )]
     Missing(&'static str),
 
     #[error("Backend error: {0}")]
-    #[diagnostic(code(graft::sqlite::backend))]
+    #[diagnostic(code(weavegraph::sqlite::backend))]
     Backend(String),
 
     #[error("Other error: {0}")]
-    #[diagnostic(code(graft::sqlite::other))]
+    #[diagnostic(code(weavegraph::sqlite::other))]
     Other(String),
 }
 
@@ -175,7 +175,7 @@ impl std::fmt::Debug for SQLiteCheckpointer {
 
 impl SQLiteCheckpointer {
     /// Connect (or create) a SQLite database at `database_url`.
-    /// Example URL: \"sqlite://graft.db\"
+    /// Example URL: \"sqlite://weavegraph.db\"
     ///
     /// Returns a configured `SQLiteCheckpointer` ready for use.
     #[must_use = "checkpointer must be used to persist state"]
@@ -428,8 +428,8 @@ impl SQLiteCheckpointer {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use graft::runtimes::checkpointer_sqlite::{SQLiteCheckpointer, StepQuery};
-    /// use graft::types::NodeKind;
+    /// use weavegraph::runtimes::checkpointer_sqlite::{SQLiteCheckpointer, StepQuery};
+    /// use weavegraph::types::NodeKind;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let checkpointer = SQLiteCheckpointer::connect("sqlite://app.db").await?;
@@ -578,7 +578,7 @@ impl SQLiteCheckpointer {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use graft::runtimes::checkpointer_sqlite::SQLiteCheckpointer;
+    /// use weavegraph::runtimes::checkpointer_sqlite::SQLiteCheckpointer;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let checkpointer = SQLiteCheckpointer::connect("sqlite://app.db").await?;

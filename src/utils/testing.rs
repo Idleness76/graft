@@ -1,4 +1,4 @@
-//! Shared testing utilities for the Graft framework.
+//! Shared testing utilities for the Weavegraph framework.
 //!
 //! This module provides common test nodes and utilities to eliminate
 //! code duplication across test modules and maintain consistency

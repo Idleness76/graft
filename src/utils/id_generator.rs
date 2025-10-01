@@ -1,7 +1,7 @@
 //! ID generation utilities for run, step, node, and session identifiers.
 //!
 //! Provides utilities for generating unique, deterministic, and contextual IDs
-//! throughout the Graft framework. Supports both random UUID-based generation
+//! throughout the Weavegraph framework. Supports both random UUID-based generation
 //! and deterministic seeded generation for testing and reproducibility.
 
 use miette::{Diagnostic, Result};
@@ -15,12 +15,12 @@ use uuid::Uuid;
 pub enum IdError {
     /// Invalid format for ID parsing or validation.
     #[error("Invalid ID format: {format}")]
-    #[diagnostic(code(graft::id::invalid_format))]
+    #[diagnostic(code(weavegraph::id::invalid_format))]
     InvalidFormat { format: String },
 
     /// ID generation failed due to system constraints.
     #[error("ID generation failed: {reason}")]
-    #[diagnostic(code(graft::id::generation_failed))]
+    #[diagnostic(code(weavegraph::id::generation_failed))]
     GenerationFailed { reason: String },
 }
 
@@ -67,7 +67,7 @@ impl fmt::Display for IdConfig {
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::id_generator::{IdGenerator, IdConfig};
+/// use weavegraph::utils::id_generator::{IdGenerator, IdConfig};
 ///
 /// // Default random ID generation
 /// let generator = IdGenerator::new();
@@ -115,11 +115,11 @@ impl IdGenerator {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::utils::id_generator::{IdGenerator, IdConfig};
+    /// use weavegraph::utils::id_generator::{IdGenerator, IdConfig};
     ///
     /// let config = IdConfig {
     ///     seed: Some(42),
-    ///     prefix: Some("graft".into()),
+    ///     prefix: Some("weavegraph".into()),
     ///     include_timestamp: true,
     ///     use_counter: false,
     /// };
@@ -144,7 +144,7 @@ impl IdGenerator {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::utils::id_generator::IdGenerator;
+    /// use weavegraph::utils::id_generator::IdGenerator;
     ///
     /// let generator = IdGenerator::new();
     /// let id = generator.generate_id();
@@ -205,7 +205,7 @@ impl IdGenerator {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::utils::id_generator::IdGenerator;
+    /// use weavegraph::utils::id_generator::IdGenerator;
     ///
     /// let generator = IdGenerator::new();
     /// let session_id = generator.generate_id_with_prefix("session");

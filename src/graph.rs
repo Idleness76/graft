@@ -16,10 +16,10 @@
 //! # Quick Start
 //!
 //! ```
-//! use graft::graph::GraphBuilder;
-//! use graft::types::NodeKind;
-//! use graft::node::{Node, NodeContext, NodePartial, NodeError};
-//! use graft::state::StateSnapshot;
+//! use weavegraph::graph::GraphBuilder;
+//! use weavegraph::types::NodeKind;
+//! use weavegraph::node::{Node, NodeContext, NodePartial, NodeError};
+//! use weavegraph::state::StateSnapshot;
 //! use async_trait::async_trait;
 //!
 //! // Define a simple node
@@ -47,8 +47,8 @@
 //! ## Conditional Routing
 //!
 //! ```
-//! use graft::graph::{GraphBuilder, EdgePredicate};
-//! use graft::types::NodeKind;
+//! use weavegraph::graph::{GraphBuilder, EdgePredicate};
+//! use weavegraph::types::NodeKind;
 //! use std::sync::Arc;
 //!
 //! // Create a predicate that routes based on message count
@@ -58,9 +58,9 @@
 //!
 //! # struct MyNode;
 //! # #[async_trait::async_trait]
-//! # impl graft::node::Node for MyNode {
-//! #     async fn run(&self, _: graft::state::StateSnapshot, _: graft::node::NodeContext) -> Result<graft::node::NodePartial, graft::node::NodeError> {
-//! #         Ok(graft::node::NodePartial::default())
+//! # impl weavegraph::node::Node for MyNode {
+//! #     async fn run(&self, _: weavegraph::state::StateSnapshot, _: weavegraph::node::NodeContext) -> Result<weavegraph::node::NodePartial, weavegraph::node::NodeError> {
+//! #         Ok(weavegraph::node::NodePartial::default())
 //! #     }
 //! # }
 //!
@@ -125,7 +125,7 @@ pub enum GraphCompileError {
 /// # Examples
 ///
 /// ```
-/// use graft::graph::EdgePredicate;
+/// use weavegraph::graph::EdgePredicate;
 /// use std::sync::Arc;
 ///
 /// // Route based on message count
@@ -149,8 +149,8 @@ pub type EdgePredicate = Arc<dyn Fn(crate::state::StateSnapshot) -> bool + Send 
 /// # Examples
 ///
 /// ```
-/// use graft::graph::{ConditionalEdge, EdgePredicate};
-/// use graft::types::NodeKind;
+/// use weavegraph::graph::{ConditionalEdge, EdgePredicate};
+/// use weavegraph::types::NodeKind;
 /// use std::sync::Arc;
 ///
 /// let predicate: EdgePredicate = Arc::new(|_| true);
@@ -191,14 +191,14 @@ pub struct ConditionalEdge {
 ///
 /// ## Simple Linear Workflow
 /// ```
-/// use graft::graph::GraphBuilder;
-/// use graft::types::NodeKind;
+/// use weavegraph::graph::GraphBuilder;
+/// use weavegraph::types::NodeKind;
 ///
 /// # struct MyNode;
 /// # #[async_trait::async_trait]
-/// # impl graft::node::Node for MyNode {
-/// #     async fn run(&self, _: graft::state::StateSnapshot, _: graft::node::NodeContext) -> Result<graft::node::NodePartial, graft::node::NodeError> {
-/// #         Ok(graft::node::NodePartial::default())
+/// # impl weavegraph::node::Node for MyNode {
+/// #     async fn run(&self, _: weavegraph::state::StateSnapshot, _: weavegraph::node::NodeContext) -> Result<weavegraph::node::NodePartial, weavegraph::node::NodeError> {
+/// #         Ok(weavegraph::node::NodePartial::default())
 /// #     }
 /// # }
 ///
@@ -213,14 +213,14 @@ pub struct ConditionalEdge {
 ///
 /// ## Complex Workflow with Fan-out
 /// ```
-/// use graft::graph::GraphBuilder;
-/// use graft::types::NodeKind;
+/// use weavegraph::graph::GraphBuilder;
+/// use weavegraph::types::NodeKind;
 ///
 /// # struct MyNode;
 /// # #[async_trait::async_trait]
-/// # impl graft::node::Node for MyNode {
-/// #     async fn run(&self, _: graft::state::StateSnapshot, _: graft::node::NodeContext) -> Result<graft::node::NodePartial, graft::node::NodeError> {
-/// #         Ok(graft::node::NodePartial::default())
+/// # impl weavegraph::node::Node for MyNode {
+/// #     async fn run(&self, _: weavegraph::state::StateSnapshot, _: weavegraph::node::NodeContext) -> Result<weavegraph::node::NodePartial, weavegraph::node::NodeError> {
+/// #         Ok(weavegraph::node::NodePartial::default())
 /// #     }
 /// # }
 ///
@@ -268,7 +268,7 @@ impl GraphBuilder {
     /// # Examples
     ///
     /// ```
-    /// use graft::graph::GraphBuilder;
+    /// use weavegraph::graph::GraphBuilder;
     ///
     /// let builder = GraphBuilder::new();
     /// // Add nodes, edges, and configuration...
@@ -301,15 +301,15 @@ impl GraphBuilder {
     /// # Examples
     ///
     /// ```
-    /// use graft::graph::{GraphBuilder, EdgePredicate};
-    /// use graft::types::NodeKind;
+    /// use weavegraph::graph::{GraphBuilder, EdgePredicate};
+    /// use weavegraph::types::NodeKind;
     /// use std::sync::Arc;
     ///
     /// # struct MyNode;
     /// # #[async_trait::async_trait]
-    /// # impl graft::node::Node for MyNode {
-    /// #     async fn run(&self, _: graft::state::StateSnapshot, _: graft::node::NodeContext) -> Result<graft::node::NodePartial, graft::node::NodeError> {
-    /// #         Ok(graft::node::NodePartial::default())
+    /// # impl weavegraph::node::Node for MyNode {
+    /// #     async fn run(&self, _: weavegraph::state::StateSnapshot, _: weavegraph::node::NodeContext) -> Result<weavegraph::node::NodePartial, weavegraph::node::NodeError> {
+    /// #         Ok(weavegraph::node::NodePartial::default())
     /// #     }
     /// # }
     ///
@@ -359,10 +359,10 @@ impl GraphBuilder {
     /// # Examples
     ///
     /// ```
-    /// use graft::graph::GraphBuilder;
-    /// use graft::types::NodeKind;
-    /// use graft::node::{Node, NodeContext, NodePartial, NodeError};
-    /// use graft::state::StateSnapshot;
+    /// use weavegraph::graph::GraphBuilder;
+    /// use weavegraph::types::NodeKind;
+    /// use weavegraph::node::{Node, NodeContext, NodePartial, NodeError};
+    /// use weavegraph::state::StateSnapshot;
     /// use async_trait::async_trait;
     ///
     /// struct ProcessorNode {
@@ -403,14 +403,14 @@ impl GraphBuilder {
     /// # Examples
     ///
     /// ```
-    /// use graft::graph::GraphBuilder;
-    /// use graft::types::NodeKind;
+    /// use weavegraph::graph::GraphBuilder;
+    /// use weavegraph::types::NodeKind;
     ///
     /// # struct MyNode;
     /// # #[async_trait::async_trait]
-    /// # impl graft::node::Node for MyNode {
-    /// #     async fn run(&self, _: graft::state::StateSnapshot, _: graft::node::NodeContext) -> Result<graft::node::NodePartial, graft::node::NodeError> {
-    /// #         Ok(graft::node::NodePartial::default())
+    /// # impl weavegraph::node::Node for MyNode {
+    /// #     async fn run(&self, _: weavegraph::state::StateSnapshot, _: weavegraph::node::NodeContext) -> Result<weavegraph::node::NodePartial, weavegraph::node::NodeError> {
+    /// #         Ok(weavegraph::node::NodePartial::default())
     /// #     }
     /// # }
     ///
@@ -422,14 +422,14 @@ impl GraphBuilder {
     ///
     /// ## Fan-out Pattern
     /// ```
-    /// use graft::graph::GraphBuilder;
-    /// use graft::types::NodeKind;
+    /// use weavegraph::graph::GraphBuilder;
+    /// use weavegraph::types::NodeKind;
     ///
     /// # struct MyNode;
     /// # #[async_trait::async_trait]
-    /// # impl graft::node::Node for MyNode {
-    /// #     async fn run(&self, _: graft::state::StateSnapshot, _: graft::node::NodeContext) -> Result<graft::node::NodePartial, graft::node::NodeError> {
-    /// #         Ok(graft::node::NodePartial::default())
+    /// # impl weavegraph::node::Node for MyNode {
+    /// #     async fn run(&self, _: weavegraph::state::StateSnapshot, _: weavegraph::node::NodeContext) -> Result<weavegraph::node::NodePartial, weavegraph::node::NodeError> {
+    /// #         Ok(weavegraph::node::NodePartial::default())
     /// #     }
     /// # }
     ///
@@ -459,14 +459,14 @@ impl GraphBuilder {
     /// # Examples
     ///
     /// ```
-    /// use graft::graph::GraphBuilder;
-    /// use graft::types::NodeKind;
+    /// use weavegraph::graph::GraphBuilder;
+    /// use weavegraph::types::NodeKind;
     ///
     /// # struct MyNode;
     /// # #[async_trait::async_trait]
-    /// # impl graft::node::Node for MyNode {
-    /// #     async fn run(&self, _: graft::state::StateSnapshot, _: graft::node::NodeContext) -> Result<graft::node::NodePartial, graft::node::NodeError> {
-    /// #         Ok(graft::node::NodePartial::default())
+    /// # impl weavegraph::node::Node for MyNode {
+    /// #     async fn run(&self, _: weavegraph::state::StateSnapshot, _: weavegraph::node::NodeContext) -> Result<weavegraph::node::NodePartial, weavegraph::node::NodeError> {
+    /// #         Ok(weavegraph::node::NodePartial::default())
     /// #     }
     /// # }
     ///
@@ -495,14 +495,14 @@ impl GraphBuilder {
     /// # Examples
     ///
     /// ```
-    /// use graft::graph::GraphBuilder;
-    /// use graft::runtimes::RuntimeConfig;
+    /// use weavegraph::graph::GraphBuilder;
+    /// use weavegraph::runtimes::RuntimeConfig;
     ///
     /// # struct MyNode;
     /// # #[async_trait::async_trait]
-    /// # impl graft::node::Node for MyNode {
-    /// #     async fn run(&self, _: graft::state::StateSnapshot, _: graft::node::NodeContext) -> Result<graft::node::NodePartial, graft::node::NodeError> {
-    /// #         Ok(graft::node::NodePartial::default())
+    /// # impl weavegraph::node::Node for MyNode {
+    /// #     async fn run(&self, _: weavegraph::state::StateSnapshot, _: weavegraph::node::NodeContext) -> Result<weavegraph::node::NodePartial, weavegraph::node::NodeError> {
+    /// #         Ok(weavegraph::node::NodePartial::default())
     /// #     }
     /// # }
     ///
@@ -543,14 +543,14 @@ impl GraphBuilder {
     /// # Examples
     ///
     /// ```
-    /// use graft::graph::GraphBuilder;
-    /// use graft::types::NodeKind;
+    /// use weavegraph::graph::GraphBuilder;
+    /// use weavegraph::types::NodeKind;
     ///
     /// # struct MyNode;
     /// # #[async_trait::async_trait]
-    /// # impl graft::node::Node for MyNode {
-    /// #     async fn run(&self, _: graft::state::StateSnapshot, _: graft::node::NodeContext) -> Result<graft::node::NodePartial, graft::node::NodeError> {
-    /// #         Ok(graft::node::NodePartial::default())
+    /// # impl weavegraph::node::Node for MyNode {
+    /// #     async fn run(&self, _: weavegraph::state::StateSnapshot, _: weavegraph::node::NodeContext) -> Result<weavegraph::node::NodePartial, weavegraph::node::NodeError> {
+    /// #         Ok(weavegraph::node::NodePartial::default())
     /// #     }
     /// # }
     ///
@@ -562,7 +562,7 @@ impl GraphBuilder {
     ///     .compile()?;
     ///
     /// // App is ready for execution
-    /// # Ok::<(), graft::graph::GraphCompileError>(())
+    /// # Ok::<(), weavegraph::graph::GraphCompileError>(())
     /// ```
     pub fn compile(self) -> Result<App, GraphCompileError> {
         let entry = self.entry.as_ref().ok_or(GraphCompileError::MissingEntry)?;

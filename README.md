@@ -1,11 +1,5 @@
-# Graft
+# Weavegraph
 
-A Rust framework for graph-driven, concurrent agent workflows with explicit, versioned state and deterministic barrier merges. Think “LangGraph-style graphs” but strongly typed, instrumented, and designed for reliability.
-
-## Highlights
-
-- Versioned, channelized state: `messages`, `extra`, and a persisted `errors` channel
-- Deterministic barrier merges via a pluggable reducer registry
 - Bounded-concurrency scheduler with version gating (superstep barrier model)
 - Strong, typed error propagation across nodes, scheduler, and runner (thiserror + miette)
 - Rich tracing spans (`tracing`) and pretty diagnostics (`miette`)
@@ -13,22 +7,14 @@ A Rust framework for graph-driven, concurrent agent workflows with explicit, ver
 
 ## Repo layout (key modules)
 
-- `src/app.rs` – Orchestrates barriers and reducers; `App::invoke` runs to completion
-- `src/runtimes/` – Sessions, runner, checkpointing (in-memory and SQLite)
-- `src/schedulers/` – Frontier scheduler (`superstep`) with version gating
-- `src/reducers/` – Reducer registry and reducers for channels
-- `src/channels/` – Channels (`MessagesChannel`, `ExtrasChannel`, `ErrorsChannel`) and error models (`ErrorEvent`)
-- `src/node.rs` – `Node` trait with typed `NodeError` and `NodePartial` outputs
 - `src/run_demo{1,2,3}.rs` – Demos showing increasing sophistication
 - `src/main.rs` – CLI to select which demo to run
 
 ## Running the demos (CLI)
-
++ use weavegraph::graph::GraphBuilder;
 Select a demo at runtime (default is `demo3`):
 
 ```bash
-cargo run -- demo1
-cargo run -- demo2
 cargo run -- demo3
 ```
 
@@ -42,10 +28,10 @@ Notes for `demo3`:
 
 - Provider: Expects Ollama running at `http://localhost:11434` and the referenced models (e.g., `gemma3`, `gemma3:270m`). If unavailable, the demo will fail gracefully and emit a structured error; you’ll see a pretty-printed error ladder.
 - Checkpointing: Uses SQLite by default. The DB URL is resolved in this order:
-  - `GRAFT_SQLITE_URL` (e.g., `sqlite://graft.db`)
+  - `WEAVEGRAPH_SQLITE_URL` (e.g., `sqlite://weavegraph.db`)
   - `sqlite_db_name` set in code
   - `SQLITE_DB_NAME` env var (filename only)
-  - Fallback: `sqlite://graft.db`
+  - Fallback: `sqlite://weavegraph.db`
 
   ## Examples (standalone)
 
@@ -66,7 +52,7 @@ cargo test --all -- --nocapture
 
 Tracing and logs:
 
-- The default filter is `info,graft=debug`. Override with `RUST_LOG`:
+- The default filter is `info,weavegraph=debug`. Override with `RUST_LOG`:
 
 ```bash
 RUST_LOG=debug cargo run -- demo2

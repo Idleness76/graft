@@ -504,7 +504,7 @@ async fn test_complex_error_serialization() {
                 "checksum": "sha256:abc123..."
             },
             "environment": {
-                "version": "graft-1.0.0",
+                "version": "Weavegraph-1.0.0",
                 "node_id": "node-03",
                 "cluster": "production-us-east"
             }

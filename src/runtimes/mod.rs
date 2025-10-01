@@ -22,9 +22,9 @@
 //! # Usage Example
 //!
 //! ```rust,no_run
-//! use graft::runtimes::{AppRunner, CheckpointerType};
-//! use graft::state::VersionedState;
-//! # use graft::app::App;
+//! use weavegraph::runtimes::{AppRunner, CheckpointerType};
+//! use weavegraph::state::VersionedState;
+//! # use weavegraph::app::App;
 //! # async fn example(app: App) -> Result<(), Box<dyn std::error::Error>> {
 //!
 //! let mut runner = AppRunner::new(app, CheckpointerType::SQLite).await;

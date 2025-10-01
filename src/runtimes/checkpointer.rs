@@ -60,7 +60,7 @@ impl Checkpoint {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// # use graft::runtimes::{Checkpoint, SessionState};
+    /// # use weavegraph::runtimes::{Checkpoint, SessionState};
     /// # fn example(session_state: SessionState) {
     /// let checkpoint = Checkpoint::from_session("my_session", &session_state);
     /// // checkpoint can now be saved via a Checkpointer
@@ -100,7 +100,7 @@ impl Checkpoint {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// # use graft::runtimes::{Checkpoint, SessionState, StepReport};
+    /// # use weavegraph::runtimes::{Checkpoint, SessionState, StepReport};
     /// # fn example(session_state: SessionState, step_report: StepReport) {
     /// let checkpoint = Checkpoint::from_step_report(
     ///     "my_session",
@@ -140,7 +140,7 @@ pub enum CheckpointerError {
     /// Session was not found in the checkpointer.
     #[error("session not found: {session_id}")]
     #[diagnostic(
-        code(graft::checkpointer::not_found),
+        code(weavegraph::checkpointer::not_found),
         help("Ensure the session ID is correct and the session has been created.")
     )]
     NotFound { session_id: String },
@@ -148,14 +148,14 @@ pub enum CheckpointerError {
     /// Backend storage error (database, filesystem, etc.).
     #[error("backend error: {message}")]
     #[diagnostic(
-        code(graft::checkpointer::backend),
+        code(weavegraph::checkpointer::backend),
         help("Check backend connectivity and permissions.")
     )]
     Backend { message: String },
 
     /// Other checkpointer errors.
     #[error("checkpointer error: {message}")]
-    #[diagnostic(code(graft::checkpointer::other))]
+    #[diagnostic(code(weavegraph::checkpointer::other))]
     Other { message: String },
 }
 
@@ -219,8 +219,8 @@ pub type Result<T> = std::result::Result<T, CheckpointerError>;
 /// # Examples
 ///
 /// ```rust,no_run
-/// use graft::runtimes::{Checkpointer, Checkpoint, InMemoryCheckpointer};
-/// use graft::state::VersionedState;
+/// use weavegraph::runtimes::{Checkpointer, Checkpoint, InMemoryCheckpointer};
+/// use weavegraph::state::VersionedState;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let checkpointer = InMemoryCheckpointer::new();
@@ -370,7 +370,7 @@ impl Checkpointer for InMemoryCheckpointer {
 /// # Examples
 ///
 /// ```rust,no_run
-/// # use graft::runtimes::{restore_session_state, Checkpoint};
+/// # use weavegraph::runtimes::{restore_session_state, Checkpoint};
 /// # async fn example(checkpoint: Checkpoint) {
 /// let session_state = restore_session_state(&checkpoint);
 /// // session_state can now be used to continue execution

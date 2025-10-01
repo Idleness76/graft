@@ -1,4 +1,4 @@
-# Clippy configuration for graft codebase
+# Clippy configuration for weavegraph codebase
 # Encourages use of Message convenience constructors over manual struct construction
 
 # Allow certain patterns that are common in this domain

@@ -17,15 +17,15 @@ use thiserror::Error;
 /// # Examples
 ///
 /// ```rust,no_run
-/// use graft::node::{Node, NodeContext, NodePartial};
-/// use graft::state::StateSnapshot;
+/// use weavegraph::node::{Node, NodeContext, NodePartial};
+/// use weavegraph::state::StateSnapshot;
 /// # use async_trait::async_trait;
 ///
 /// struct MyNode;
 ///
 /// #[async_trait]
 /// impl Node for MyNode {
-///     async fn run(&self, snapshot: StateSnapshot, ctx: NodeContext) -> Result<NodePartial, graft::node::NodeError> {
+///     async fn run(&self, snapshot: StateSnapshot, ctx: NodeContext) -> Result<NodePartial, weavegraph::node::NodeError> {
 ///         // Emit a progress event
 ///         ctx.emit("processing", "Starting node execution")?;
 ///         
@@ -61,7 +61,7 @@ impl NodeContext {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// # use graft::node::NodeContext;
+    /// # use weavegraph::node::NodeContext;
     /// # async fn example(ctx: NodeContext) -> Result<(), Box<dyn std::error::Error>> {
     /// ctx.emit("validation", "Input parameters validated successfully")?;
     /// ctx.emit("processing", format!("Processing {} items", 42))?;
@@ -125,8 +125,8 @@ impl NodeContext {
 /// # Examples
 ///
 /// ```rust
-/// use graft::node::NodePartial;
-/// use graft::utils::collections::new_extra_map;
+/// use weavegraph::node::NodePartial;
+/// use weavegraph::utils::collections::new_extra_map;
 ///
 /// // Node that only adds messages
 /// let partial = NodePartial {
@@ -169,8 +169,8 @@ impl NodePartial {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::node::NodePartial;
-    /// use graft::message::Message;
+    /// use weavegraph::node::NodePartial;
+    /// use weavegraph::message::Message;
     ///
     /// let messages = vec![Message {
     ///     role: "assistant".to_string(),
@@ -196,8 +196,8 @@ impl NodePartial {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::node::NodePartial;
-    /// use graft::utils::collections::new_extra_map;
+    /// use weavegraph::node::NodePartial;
+    /// use weavegraph::utils::collections::new_extra_map;
     /// use serde_json::json;
     ///
     /// let mut extra = new_extra_map();
@@ -269,8 +269,8 @@ impl NodePartial {
 /// # Examples
 ///
 /// ```rust,no_run
-/// use graft::node::{Node, NodeContext, NodePartial, NodeError};
-/// use graft::state::StateSnapshot;
+/// use weavegraph::node::{Node, NodeContext, NodePartial, NodeError};
+/// use weavegraph::state::StateSnapshot;
 /// use async_trait::async_trait;
 ///
 /// /// A node that validates input data
@@ -329,14 +329,14 @@ pub enum NodeError {
     /// Expected input data is missing from the state snapshot.
     #[error("missing expected input: {what}")]
     #[diagnostic(
-        code(graft::node::missing_input),
+        code(weavegraph::node::missing_input),
         help("Check that the previous node produced the required data.")
     )]
     MissingInput { what: &'static str },
 
     /// External provider or service error.
     #[error("provider error ({provider}): {message}")]
-    #[diagnostic(code(graft::node::provider))]
+    #[diagnostic(code(weavegraph::node::provider))]
     Provider {
         provider: &'static str,
         message: String,
@@ -344,20 +344,20 @@ pub enum NodeError {
 
     /// JSON serialization/deserialization error.
     #[error(transparent)]
-    #[diagnostic(code(graft::node::serde_json))]
+    #[diagnostic(code(weavegraph::node::serde_json))]
     Serde(#[from] serde_json::Error),
 
     /// Input validation failed.
     #[error("validation failed: {0}")]
     #[diagnostic(
-        code(graft::node::validation),
+        code(weavegraph::node::validation),
         help("Check input data format and required fields.")
     )]
     ValidationFailed(String),
 
     /// Event bus communication error.
     #[error("event bus error: {0}")]
-    #[diagnostic(code(graft::node::event_bus))]
+    #[diagnostic(code(weavegraph::node::event_bus))]
     EventBus(#[from] flume::SendError<Event>),
 }
 

@@ -1,10 +1,10 @@
-# Graft × LangGraph Port (Rig-powered) — Aligned With Our Barrier Model
+# Weavegraph × LangGraph Port (Rig-powered) — Aligned With Our Barrier Model
 
-Status: Updated plan (v2). This version explicitly centers Graft’s Node → Partial → Barrier → Reducers execution model and maps LangGraph concepts onto it. No Task/NextAction API; no FanOut construct (we already run the frontier in parallel). The plan focuses on durable execution, interrupts, conditional routing, LLM/tool nodes via Rig, streaming, and RAG — implemented the LangGraph way while preserving our deterministic barrier semantics.
+Status: Updated plan (v2). This version explicitly centers Weavegraph’s Node → Partial → Barrier → Reducers execution model and maps LangGraph concepts onto it. No Task/NextAction API; no FanOut construct (we already run the frontier in parallel). The plan focuses on durable execution, interrupts, conditional routing, LLM/tool nodes via Rig, streaming, and RAG — implemented the LangGraph way while preserving our deterministic barrier semantics.
 
 ## 0) Executive Summary
 
-Graft today:
+Weavegraph today:
 - Nodes read an immutable `StateSnapshot` and return a sparse `NodePartial`.
 - A scheduler runs the current frontier concurrently; a barrier merges all partials via a reducer registry; versions bump only when content changes; the next frontier is built from edges of nodes that ran.
 
@@ -20,7 +20,7 @@ We keep superstep parallelism (no separate FanOut API) and our reducers as core 
 
 ---
 
-## 1) How Graft Works (today)
+## 1) How Weavegraph Works (today)
 
 - `Node::run(snapshot, ctx) -> NodePartial` where:
   - `snapshot` is a deep copy of `VersionedState` channels (messages, extra, ...).
@@ -205,7 +205,7 @@ We intentionally avoid mutating shared state inside nodes or introducing Task/Ne
 - Error channel + retry hooks
 - RAG: chunkers, embeddings, vector store, example
 
-This plan keeps Graft’s core intact and implements LangGraph’s most‑used production features in a way that fits our model and raises determinism and observability as first‑class differentiators.
+This plan keeps Weavegraph’s core intact and implements LangGraph’s most‑used production features in a way that fits our model and raises determinism and observability as first‑class differentiators.
 
 ---
 
@@ -213,13 +213,13 @@ This plan keeps Graft’s core intact and implements LangGraph’s most‑used p
 
 
 - LangGraph checkpoints at node boundaries and supports interrupts before/after specific nodes. Execution effectively progresses node-by-node, withdurability at those boundaries.
-- Graft’s barrier model executes a frontier (potentially multiple nodes) then commits via a single barrier. To align with LangGraph, we keep barrie‑level checkpoints by default and add node‑level interrupt controls that gate scheduling so we can pause/resume around a particular node whendesired.
+- Weavegraph’s barrier model executes a frontier (potentially multiple nodes) then commits via a single barrier. To align with LangGraph, we keep barrie‑level checkpoints by default and add node‑level interrupt controls that gate scheduling so we can pause/resume around a particular node whendesired.
 - AppRunner therefore supports two aligned modes without changing Node semantics:
   1) Superstep stepping (default): maximal parallelism; checkpoint after barrier (closest to today’s engine).
   2) Node‑focused stepping (optional): when an interrupt is configured for a frontier node, the runner can gate the scheduler to run just that node(serialize a chosen node) while deferring others; this yields LangGraph‑like node granularity where needed.
 - Both modes retain the core property that state commits only at barriers; node‑level pausing happens by controlling which nodes are allowed toexecute in the next superstep.
 
-Result: we remain faithful to LangGraph’s human‑in‑the‑loop semantics while preserving Graft’s deterministic barrier model.
+Result: we remain faithful to LangGraph’s human‑in‑the‑loop semantics while preserving Weavegraph’s deterministic barrier model.
 
 ---
 
@@ -303,4 +303,4 @@ This gives us LangGraph‑like human‑in‑the‑loop control while honoring ou
 - Multi‑user sessions: collaborative editing with merge policies; optimistic locking at channel level.
 - SDKs and tooling: CLI to run/inspect/resume flows; codegen for graphs from DOT/Mermaid; studio UI.
 
-These items deepen parity with LangGraph’s ecosystem and differentiate Graft with stronger determinism, scale, and developer ergonomics.
+These items deepen parity with LangGraph’s ecosystem and differentiate Weavegraph with stronger determinism, scale, and developer ergonomics.

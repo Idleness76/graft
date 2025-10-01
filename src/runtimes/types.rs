@@ -19,7 +19,7 @@ are executed, tracked, and persisted, but don't define what workflows *are*.
 # Examples
 
 ```rust
-use graft::runtimes::types::{SessionId, StepNumber};
+use weavegraph::runtimes::types::{SessionId, StepNumber};
 
 // Type-safe session management
 let session = SessionId::generate();
@@ -42,7 +42,7 @@ use std::fmt;
 /// # Examples
 ///
 /// ```rust
-/// use graft::runtimes::types::SessionId;
+/// use weavegraph::runtimes::types::SessionId;
 ///
 /// let session_id = SessionId::new("my_session");
 /// let generated_id = SessionId::generate();
@@ -136,7 +136,7 @@ impl AsRef<str> for SessionId {
 /// # Examples
 ///
 /// ```rust
-/// use graft::runtimes::types::StepNumber;
+/// use weavegraph::runtimes::types::StepNumber;
 ///
 /// let step = StepNumber::new(5);
 /// let next_step = step.next();

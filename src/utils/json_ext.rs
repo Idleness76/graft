@@ -1,4 +1,4 @@
-//! JSON manipulation utilities and extensions for the Graft framework.
+//! JSON manipulation utilities and extensions for the Weavegraph framework.
 //!
 //! Provides utilities for deep merging JSON objects, pointer-based access,
 //! and common JSON manipulation patterns used throughout the framework.
@@ -13,12 +13,12 @@ use thiserror::Error;
 pub enum JsonError {
     /// Invalid JSON pointer format.
     #[error("Invalid JSON pointer: {pointer}")]
-    #[diagnostic(code(graft::json::invalid_pointer))]
+    #[diagnostic(code(weavegraph::json::invalid_pointer))]
     InvalidPointer { pointer: String },
 
     /// JSON merge conflict that cannot be resolved.
     #[error("Merge conflict at path '{path}': cannot merge {left_type} with {right_type}")]
-    #[diagnostic(code(graft::json::merge_conflict))]
+    #[diagnostic(code(weavegraph::json::merge_conflict))]
     MergeConflict {
         path: String,
         left_type: String,
@@ -27,7 +27,7 @@ pub enum JsonError {
 
     /// Serialization/deserialization error.
     #[error("JSON serialization error: {source}")]
-    #[diagnostic(code(graft::json::serde))]
+    #[diagnostic(code(weavegraph::json::serde))]
     Serde {
         #[from]
         source: serde_json::Error,
@@ -60,7 +60,7 @@ pub enum MergeStrategy {
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::json_ext::{deep_merge, MergeStrategy};
+/// use weavegraph::utils::json_ext::{deep_merge, MergeStrategy};
 /// use serde_json::{json, Value};
 ///
 /// let left = json!({"a": 1, "b": {"x": 10}});
@@ -179,7 +179,7 @@ fn get_value_type(value: &Value) -> &'static str {
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::json_ext::{merge_multiple, MergeStrategy};
+/// use weavegraph::utils::json_ext::{merge_multiple, MergeStrategy};
 /// use serde_json::json;
 ///
 /// let values = vec![
@@ -215,7 +215,7 @@ where
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::json_ext::get_by_path;
+/// use weavegraph::utils::json_ext::get_by_path;
 /// use serde_json::json;
 ///
 /// let data = json!({"user": {"profile": {"name": "Alice"}}});
@@ -260,7 +260,7 @@ pub fn get_by_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::json_ext::set_by_path;
+/// use weavegraph::utils::json_ext::set_by_path;
 /// use serde_json::{json, Value};
 ///
 /// let mut data = json!({});
@@ -319,7 +319,7 @@ pub fn set_by_path(target: &mut Value, path: &str, value: Value) -> Result<(), J
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::json_ext::has_structure;
+/// use weavegraph::utils::json_ext::has_structure;
 /// use serde_json::json;
 ///
 /// let data = json!({"name": "Alice", "age": 30, "email": "alice@example.com"});
