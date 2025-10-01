@@ -74,10 +74,7 @@ impl Node for ContentGeneratorNode {
                     what: "user_prompt",
                 })?;
 
-        ctx.emit(
-            "llm_input",
-            format!("User prompt: {}", user_prompt.content),
-        )?;
+        ctx.emit("llm_input", format!("User prompt: {}", user_prompt.content))?;
 
         // Initialize Ollama client with modern patterns
         let client = ollama::Client::new();
@@ -537,11 +534,7 @@ async fn demo() -> Result<()> {
         // Display content in chunks for readability
         let content = &final_content.content;
         let chunk_size = 80;
-        for chunk in content
-            .chars()
-            .collect::<Vec<_>>()
-            .chunks(chunk_size)
-        {
+        for chunk in content.chars().collect::<Vec<_>>().chunks(chunk_size) {
             let line: String = chunk.iter().collect();
             println!("   {}", line);
         }
