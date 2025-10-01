@@ -72,10 +72,9 @@ sqlx = { version = "0.8", features = [
 # Configuration
 dotenvy = "0.15"
 
-# Optional future section:
-# [package.metadata.docs.rs]
-# all-features = true
-# rustdoc-args = ["--cfg", "docsrs"]
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["sqlite-migrations"]
