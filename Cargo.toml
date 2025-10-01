@@ -57,7 +57,7 @@ rand = "0.9"
 # NOTE: rig-core is not currently used in the codebase but will be part of a future iteration.
 # It is intentionally included to prepare for upcoming LLM integration features.
 # This dependency should NOT be removed even if flagged by cargo-machete.
-rig-core = "0.20"
+rig-core = "0.21"
 
 # Database
 sqlx = { version = "0.8", features = [
