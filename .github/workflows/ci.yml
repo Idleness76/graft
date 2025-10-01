@@ -139,7 +139,7 @@ jobs:
 
     - name: Publish to crates.io
       env:
-        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        CARGO_WEAVEGRAPH: ${{ secrets.CARGO_WEAVEGRAPH }}
       run: cargo publish
 
   # Check examples compile (optional, runs on main branch)

@@ -8,7 +8,7 @@ This document outlines how to release new versions of Weavegraph.
 
 1. **Set up crates.io token**: Add your crates.io API token as a GitHub secret:
    - Go to [crates.io/me](https://crates.io/me) and generate an API token
-   - Add it to GitHub repository secrets as `CARGO_REGISTRY_TOKEN`
+   - Add it to GitHub repository secrets as `CARGO_WEAVEGRAPH`
    - Settings → Secrets and variables → Actions → New repository secret
 
 2. **Ensure all changes are merged**: Make sure all intended changes are on the `main` branch
@@ -121,6 +121,6 @@ cargo yank --version 0.1.0 --undo
 
 ## GitHub Secrets Required
 
-- `CARGO_REGISTRY_TOKEN`: Your crates.io API token for publishing
+- `CARGO_WEAVEGRAPH`: Your crates.io API token for publishing
 
 The `GITHUB_TOKEN` is automatically provided by GitHub Actions.
