@@ -90,7 +90,7 @@ impl Node for StreamingGeneratorNode {
 
         ctx.emit(
             "prompt_extracted",
-            &format!(
+            format!(
                 "Processing user prompt (length: {} chars)",
                 user_prompt.content.len()
             ),
@@ -140,7 +140,7 @@ impl Node for StreamingGeneratorNode {
                 let ttfb = chunk_time.duration_since(stream_start);
                 ctx.emit(
                     "first_chunk",
-                    &format!(
+                    format!(
                         "First chunk received (TTFB: {:.2}ms)",
                         ttfb.as_secs_f64() * 1000.0
                     ),
@@ -157,7 +157,7 @@ impl Node for StreamingGeneratorNode {
                     let chunk_delay = chunk_time.duration_since(last_chunk_time);
                     ctx.emit(
                         "text_chunk",
-                        &format!(
+                        format!(
                             "Chunk {}: {} chars (delay: {:.1}ms)",
                             chunk_count,
                             text.len(),
@@ -177,7 +177,7 @@ impl Node for StreamingGeneratorNode {
 
                     ctx.emit(
                         "reasoning_chunk",
-                        &format!("Reasoning received: {} chars", reasoning_text.len()),
+                        format!("Reasoning received: {} chars", reasoning_text.len()),
                     )?;
                 }
 
@@ -187,7 +187,7 @@ impl Node for StreamingGeneratorNode {
 
                     ctx.emit(
                         "final_response",
-                        &format!("Final response: {} chars", res.response().len()),
+                        format!("Final response: {} chars", res.response().len()),
                     )?;
                 }
 
@@ -228,7 +228,7 @@ impl Node for StreamingGeneratorNode {
                     };
 
                     errors.push(error_event);
-                    ctx.emit("streaming_error", &format!("Streaming error: {}", err))?;
+                    ctx.emit("streaming_error", format!("Streaming error: {}", err))?;
                 }
 
                 _ => {
@@ -242,7 +242,7 @@ impl Node for StreamingGeneratorNode {
 
         ctx.emit(
             "streaming_complete",
-            &format!(
+            format!(
                 "Streaming completed: {} chunks, {:.2}s total",
                 chunk_count,
                 stream_duration.as_secs_f64()
@@ -293,7 +293,7 @@ impl Node for StreamingGeneratorNode {
 
         ctx.emit(
             "node_complete",
-            &format!(
+            format!(
                 "StreamingGenerator completed: {} chars, {} errors",
                 total_content.len(),
                 errors.len()
@@ -404,14 +404,14 @@ impl Node for StreamingEnhancerNode {
             .messages
             .iter()
             .filter(|msg| msg.is_assistant())
-            .last()
+            .next_back()
             .ok_or(NodeError::MissingInput {
                 what: "previous_assistant_content",
             })?;
 
         ctx.emit(
             "input_analysis",
-            &format!(
+            format!(
                 "Enhancing content: {} chars, {} words, {} lines",
                 previous_content.content.len(),
                 previous_content.content.split_whitespace().count(),
@@ -480,7 +480,7 @@ impl Node for StreamingEnhancerNode {
 
                     ctx.emit(
                         "enhancement_chunk",
-                        &format!("Enhancement chunk {}: {} chars", chunk_count, text.len()),
+                        format!("Enhancement chunk {}: {} chars", chunk_count, text.len()),
                     )?;
                 }
 
@@ -492,7 +492,7 @@ impl Node for StreamingEnhancerNode {
 
                     ctx.emit(
                         "enhancement_reasoning",
-                        &format!("Enhancement reasoning: {} chars", reasoning_text.len()),
+                        format!("Enhancement reasoning: {} chars", reasoning_text.len()),
                     )?;
                 }
 
@@ -502,7 +502,7 @@ impl Node for StreamingEnhancerNode {
 
                     ctx.emit(
                         "enhancement_final",
-                        &format!(
+                        format!(
                             "Enhancement complete: {} total chars",
                             enhanced_content.len()
                         ),
@@ -590,7 +590,7 @@ impl Node for StreamingEnhancerNode {
 
         ctx.emit(
             "enhancer_complete",
-            &format!(
+            format!(
                 "Enhancement completed: {:.1}x expansion, {} errors",
                 enhanced_content.len() as f64 / previous_content.content.len() as f64,
                 errors.len()
@@ -997,7 +997,7 @@ async fn demo() -> Result<()> {
                 ErrorScope::Node { kind, .. } => format!("Node:{}", kind),
                 ErrorScope::Scheduler { .. } => "Scheduler".to_string(),
                 ErrorScope::Runner { .. } => "Runner".to_string(),
-                ErrorScope::App { .. } => "App".to_string(),
+                ErrorScope::App => "App".to_string(),
             };
             *error_scopes.entry(scope_str).or_insert(0) += 1;
         }

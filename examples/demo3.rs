@@ -76,7 +76,7 @@ impl Node for ContentGeneratorNode {
 
         ctx.emit(
             "llm_input",
-            &format!("User prompt: {}", user_prompt.content),
+            format!("User prompt: {}", user_prompt.content),
         )?;
 
         // Initialize Ollama client with modern patterns
@@ -103,7 +103,7 @@ impl Node for ContentGeneratorNode {
 
         ctx.emit(
             "llm_response",
-            &format!("Generated {} response choices", response.choice.len()),
+            format!("Generated {} response choices", response.choice.len()),
         )?;
 
         // ✅ MODERN: Use convenience constructor for response message
@@ -163,7 +163,7 @@ impl Node for ContentEnhancerNode {
 
         ctx.emit(
             "enhance_start",
-            &format!(
+            format!(
                 "Starting enhancement iteration {} with {} messages",
                 current_iterations + 1,
                 snapshot.messages.len()
@@ -175,14 +175,14 @@ impl Node for ContentEnhancerNode {
             .messages
             .iter()
             .filter(|msg| msg.is_assistant())
-            .last()
+            .next_back()
             .ok_or(NodeError::MissingInput {
                 what: "previous_assistant_content",
             })?;
 
         ctx.emit(
             "enhance_input",
-            &format!(
+            format!(
                 "Enhancing content (length: {} chars)",
                 previous_content.content.len()
             ),
@@ -248,7 +248,7 @@ impl Node for ContentEnhancerNode {
 
         ctx.emit(
             "enhance_complete",
-            &format!(
+            format!(
                 "Enhancement completed. Iteration: {}, Growth: {:.1}x",
                 current_iterations + 1,
                 enhanced_content.len() as f64 / previous_content.content.len() as f64

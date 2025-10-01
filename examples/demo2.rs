@@ -50,7 +50,7 @@ impl Node for SchedulerDemoNode {
         // Emit execution start event
         ctx.emit(
             "scheduler_node_start",
-            &format!(
+            format!(
                 "Node {} starting execution ({}ms)",
                 self.name, self.execution_time_ms
             ),
@@ -76,7 +76,7 @@ impl Node for SchedulerDemoNode {
             "Analyzer" => format!("📊 Analysis complete: Processed '{}'", input_msg),
             "ProcessorA" => format!("⚙️ ProcessorA: Transformed '{}'", input_msg),
             "ProcessorB" => format!("⚙️ ProcessorB: Enhanced '{}'", input_msg),
-            "Synthesizer" => format!("🔄 Synthesis: Combined all inputs into final result"),
+            "Synthesizer" => "🔄 Synthesis: Combined all inputs into final result".to_string(),
             "End" => "✅ Workflow completed successfully".to_string(),
             _ => format!("🔄 [{}] Processed: {}", self.name, input_msg),
         };
@@ -89,7 +89,7 @@ impl Node for SchedulerDemoNode {
         // Emit completion event
         ctx.emit(
             "scheduler_node_complete",
-            &format!(
+            format!(
                 "Node {} completed after {}ms",
                 self.name, self.execution_time_ms
             ),
