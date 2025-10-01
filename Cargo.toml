@@ -15,6 +15,7 @@ documentation = "https://docs.rs/graft"
 [dev-dependencies]
 proptest = "1"
 tempfile = "3"
+httpmock = "0.7"
 
 [dependencies]
 # Error handling & diagnostics
@@ -27,7 +28,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "ansi"]
 tracing-error = "0.2"
 
 # Async runtime
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs"] }
 async-trait = "0.1"
 futures-util = "0.3"
 
@@ -38,14 +39,24 @@ serde_json = "1"
 # Data structures & utilities
 rustc-hash = "2.1"
 flume = "0.11"
+once_cell = "1.19"
 
 # Time & IDs
 chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", features = ["v4", "serde"] }
 rand = "0.9"
 
+# HTTP client
+reqwest = { version = "0.12", default-features = false, features = ["json", "gzip", "brotli", "rustls-tls"] }
+url = "2"
+
 # LLM framework (external dependency)
-rig-core = "0.20"
+rig-core = { version = "0.21", features = ["derive"] }
+
+# Vector store integration
+rig-sqlite = "0.1.23"
+tokio-rusqlite = { version = "0.6", features = ["bundled"] }
+sqlite-vec = "0.1"
 
 # Database
 sqlx = { version = "0.8", features = [
@@ -59,15 +70,33 @@ sqlx = { version = "0.8", features = [
 
 # Configuration
 dotenvy = "0.15"
+regex = "1"
+segtok = { version = "0.1.5", optional = true }
+
+scraper = "0.24"
+unicode-segmentation = "1.11"
+
+# Token accounting (feature-gated)
+tiktoken-rs = { version = "0.7", optional = true }
+
+# NLP helpers (feature-gated, heavy)
+rust-bert = { version = "0.23", default-features = false, optional = true }
 
 # Optional future section:
 # [package.metadata.docs.rs]
 # all-features = true
 # rustdoc-args = ["--cfg", "docsrs"]
 
+[[bin]]
+name = "query_chunks"
+path = "query_chunks.rs"
+
 [features]
-default = ["sqlite-migrations"]
+default = ["sqlite-migrations", "semantic-chunking-tiktoken"]
 sqlite-migrations = []
+semantic-chunking-tiktoken = ["tiktoken-rs"]
+semantic-chunking-rust-bert = ["rust-bert"]
+semantic-chunking-segtok = ["segtok"]
 
 # Clippy configuration to enforce Message API best practices
 [lints.clippy]

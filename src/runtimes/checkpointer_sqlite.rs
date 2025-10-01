@@ -67,7 +67,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use miette::Diagnostic;
 use serde_json::Value;
-use sqlx::{Row, SqlitePool, sqlite::SqliteRow};
+use sqlx::{sqlite::SqliteRow, Row, SqlitePool};
 use thiserror::Error;
 use tracing::instrument;
 
@@ -347,8 +347,8 @@ impl Checkpointer for SQLiteCheckpointer {
 mod tests {
     use super::*;
     use crate::channels::Channel;
-    use crate::runtimes::checkpointer::Checkpoint as CP;
     use crate::runtimes::checkpointer::restore_session_state;
+    use crate::runtimes::checkpointer::Checkpoint as CP;
 
     use crate::state::VersionedState;
     use rustc_hash::FxHashMap;

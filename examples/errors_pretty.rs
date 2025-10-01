@@ -1,5 +1,5 @@
 use chrono::{TimeZone, Utc};
-use graft::channels::errors::{ErrorEvent, ErrorScope, LadderError, pretty_print};
+use graft::channels::errors::{pretty_print, ErrorEvent, ErrorScope, LadderError};
 use serde_json::json;
 
 fn main() {

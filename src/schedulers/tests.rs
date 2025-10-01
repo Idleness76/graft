@@ -1,7 +1,9 @@
 use super::scheduler::{Scheduler, SchedulerState, StepRunResult};
 use crate::event_bus::EventBus;
 use crate::node::{Node, NodeError};
-use crate::testing::{create_test_snapshot, make_delayed_registry, make_test_registry, FailingNode};
+use crate::testing::{
+    create_test_snapshot, make_delayed_registry, make_test_registry, FailingNode,
+};
 use crate::types::NodeKind;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
@@ -78,7 +80,7 @@ async fn test_superstep_skips_end_and_nochange() {
         NodeKind::Other("B".into()),
     ];
     let event_bus = EventBus::default();
-    
+
     // First run: nothing recorded, both A and B should run; End skipped.
     let snap = create_test_snapshot(1, 1);
     let res1: StepRunResult = sched
@@ -92,7 +94,7 @@ async fn test_superstep_skips_end_and_nochange() {
         )
         .await
         .unwrap();
-    
+
     // All ran except End
     let ran1: std::collections::HashSet<_> = res1.ran_nodes.iter().cloned().collect();
     assert!(ran1.contains(&NodeKind::Other("A".into())));
@@ -114,7 +116,7 @@ async fn test_superstep_skips_end_and_nochange() {
         .await
         .unwrap();
     assert!(res2.ran_nodes.is_empty());
-    
+
     // Both A and B plus End appear in skipped (version-gated or End)
     let skipped2: std::collections::HashSet<_> = res2.skipped_nodes.iter().cloned().collect();
     assert!(skipped2.contains(&NodeKind::Other("A".into())));

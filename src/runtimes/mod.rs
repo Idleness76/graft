@@ -5,8 +5,8 @@ pub mod runner;
 pub mod runtime_config;
 
 pub use checkpointer::{
-    Checkpoint, Checkpointer, CheckpointerError, CheckpointerType, InMemoryCheckpointer,
-    restore_session_state,
+    restore_session_state, Checkpoint, Checkpointer, CheckpointerError, CheckpointerType,
+    InMemoryCheckpointer,
 };
 pub use checkpointer_sqlite::SQLiteCheckpointer;
 pub use persistence::*;

@@ -1,5 +1,5 @@
-use crate::channels::Channel;
 use crate::channels::errors::{ErrorEvent, ErrorScope, LadderError};
+use crate::channels::Channel;
 use crate::runtimes::checkpointer::{Checkpoint, Checkpointer};
 use crate::runtimes::checkpointer_sqlite::SQLiteCheckpointer;
 use crate::runtimes::runner::SessionState;
@@ -105,11 +105,9 @@ async fn test_error_persistence_roundtrip() {
     assert_eq!(restored_errors[0].error.message, "Node processing failed");
     assert_eq!(restored_errors[0].tags.len(), 2);
     assert!(restored_errors[0].tags.contains(&"critical".to_string()));
-    assert!(
-        restored_errors[0]
-            .tags
-            .contains(&"node_failure".to_string())
-    );
+    assert!(restored_errors[0]
+        .tags
+        .contains(&"node_failure".to_string()));
     if let ErrorScope::Node { kind, step } = &restored_errors[0].scope {
         assert_eq!(kind, "test_node");
         assert_eq!(*step, 42);

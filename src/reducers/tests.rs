@@ -244,13 +244,11 @@ fn test_registry_integration_like_flow() {
         }
     }
 
-    assert!(
-        state
-            .messages
-            .snapshot()
-            .iter()
-            .any(|m| m.content == "from node")
-    );
+    assert!(state
+        .messages
+        .snapshot()
+        .iter()
+        .any(|m| m.content == "from node"));
     assert_eq!(
         state.extra.snapshot().get("origin"),
         Some(&Value::String("node".into()))
