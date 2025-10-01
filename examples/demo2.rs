@@ -1,6 +1,6 @@
 //! Demo 2: Scheduler-Driven Workflow Execution
 //!
-//! This example demonstrates the advanced scheduler-driven execution model in Graft.
+//! This example demonstrates the advanced scheduler-driven execution model in Weavegraph.
 //! Unlike the basic graph execution in demo1, this shows how to:
 //!
 //! 1. Create nodes with variable execution times for scheduling demonstration
@@ -12,12 +12,12 @@
 //! providing efficient concurrent execution while respecting the dependency graph.
 
 use async_trait::async_trait;
-use graft::channels::Channel;
-use graft::graph::GraphBuilder;
-use graft::message::Message;
-use graft::node::{Node, NodeContext, NodeError, NodePartial};
-use graft::state::{StateSnapshot, VersionedState};
-use graft::types::NodeKind;
+use weavegraph::channels::Channel;
+use weavegraph::graph::GraphBuilder;
+use weavegraph::message::Message;
+use weavegraph::node::{Node, NodeContext, NodeError, NodePartial};
+use weavegraph::state::{StateSnapshot, VersionedState};
+use weavegraph::types::NodeKind;
 use rustc_hash::FxHashMap;
 use serde_json::json;
 use std::time::Duration;

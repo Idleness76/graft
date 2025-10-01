@@ -2,7 +2,7 @@
 
 ## 🎯 **Project Complete: All Demo Files Modernized**
 
-All four demo files have been successfully updated to use the latest patterns in the Graft codebase, with comprehensive documentation and full compilation verification.
+All four demo files have been successfully updated to use the latest patterns in the Weavegraph codebase, with comprehensive documentation and full compilation verification.
 
 ---
 
@@ -201,7 +201,7 @@ The demo series now provides a comprehensive learning path:
 
 ## 🚀 **Running the Demos**
 
-All demos are now ready to run and demonstrate modern Graft patterns:
+All demos are now ready to run and demonstrate modern Weavegraph patterns:
 
 ```bash
 # Demo 1: Basic patterns
@@ -281,6 +281,6 @@ All demo files have been thoroughly tested and verified on the target system:
 
 ### **🔧 Compilation & Dependencies**
 - **Build Status**: All examples compile successfully
-- **Dependencies**: Modern graft crate imports, tokio async runtime, external API integrations
+- **Dependencies**: Modern weavegraph crate imports, tokio async runtime, external API integrations
 - **No Regressions**: Existing test suite continues to pass (136 tests + 119 doc tests)
 - **Cross-Platform**: Verified on Linux environment with Docker-based services

@@ -24,13 +24,13 @@ pub trait Reducer: Send + Sync {
 pub enum ReducerError {
     #[error("no reducers registered for channel: {0:?}")]
     #[diagnostic(
-        code(graft::reducers::unknown_channel),
+        code(weavegraph::reducers::unknown_channel),
         help("Register a reducer for this channel or adjust the registry configuration.")
     )]
     UnknownChannel(ChannelType),
 
     #[error("reducer apply error: {0}")]
-    #[diagnostic(code(graft::reducers::apply))]
+    #[diagnostic(code(weavegraph::reducers::apply))]
     Apply(String),
 }
 

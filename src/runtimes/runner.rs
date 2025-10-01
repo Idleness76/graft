@@ -92,30 +92,30 @@ pub enum SessionInit {
 #[derive(Debug, Error, Diagnostic)]
 pub enum RunnerError {
     #[error("session not found: {session_id}")]
-    #[diagnostic(code(graft::runner::session_not_found))]
+    #[diagnostic(code(weavegraph::runner::session_not_found))]
     SessionNotFound { session_id: String },
 
     #[error("no nodes to run from START (empty frontier)")]
     #[diagnostic(
-        code(graft::runner::no_start_nodes),
+        code(weavegraph::runner::no_start_nodes),
         help("Add edges from Start or set the entry node correctly.")
     )]
     NoStartNodes,
 
     #[error("unexpected pause during run_until_complete")]
-    #[diagnostic(code(graft::runner::unexpected_pause))]
+    #[diagnostic(code(weavegraph::runner::unexpected_pause))]
     UnexpectedPause,
 
     #[error(transparent)]
-    #[diagnostic(code(graft::runner::checkpointer))]
+    #[diagnostic(code(weavegraph::runner::checkpointer))]
     Checkpointer(#[from] CheckpointerError),
 
     #[error("app barrier error: {0}")]
-    #[diagnostic(code(graft::runner::barrier))]
+    #[diagnostic(code(weavegraph::runner::barrier))]
     AppBarrier(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error(transparent)]
-    #[diagnostic(code(graft::runner::scheduler))]
+    #[diagnostic(code(weavegraph::runner::scheduler))]
     Scheduler(#[from] SchedulerError),
 }
 
@@ -138,7 +138,7 @@ impl AppRunner {
         match checkpointer_type {
             CheckpointerType::InMemory => Some(Arc::new(InMemoryCheckpointer::new())),
             CheckpointerType::SQLite => {
-                let db_url = std::env::var("GRAFT_SQLITE_URL")
+                let db_url = std::env::var("WEAVEGRAPH_SQLITE_URL")
                     .ok()
                     .or_else(|| {
                         sqlite_db_name
@@ -147,7 +147,7 @@ impl AppRunner {
                     })
                     .unwrap_or_else(|| {
                         let fallback = std::env::var("SQLITE_DB_NAME")
-                            .unwrap_or_else(|_| "graft.db".to_string());
+                            .unwrap_or_else(|_| "weavegraph.db".to_string());
                         format!("sqlite://{fallback}")
                     });
                 // Ensure underlying sqlite file exists. Steps:
@@ -918,7 +918,7 @@ mod tests {
 
         // Set up environment variable for SQLite URL
         std::env::set_var(
-            "GRAFT_SQLITE_URL",
+            "WEAVEGRAPH_SQLITE_URL",
             format!("sqlite://{}", db_path.display()),
         );
 
@@ -979,7 +979,7 @@ mod tests {
         );
 
         // Clean up environment variable
-        std::env::remove_var("GRAFT_SQLITE_URL");
+        std::env::remove_var("WEAVEGRAPH_SQLITE_URL");
     }
 
     #[tokio::test]

@@ -17,7 +17,7 @@ use std::collections::HashMap;
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::deterministic_rng::DeterministicRng;
+/// use weavegraph::utils::deterministic_rng::DeterministicRng;
 ///
 /// let mut rng = DeterministicRng::new(42);
 /// let value1 = rng.random_u64();
@@ -107,7 +107,7 @@ impl DeterministicRng {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::utils::deterministic_rng::DeterministicRng;
+    /// use weavegraph::utils::deterministic_rng::DeterministicRng;
     ///
     /// let mut rng = DeterministicRng::new(42);
     /// let random_string = rng.random_string(8);
@@ -130,7 +130,7 @@ impl DeterministicRng {
     ///
     /// # Examples
     /// ```rust
-    /// use graft::utils::deterministic_rng::DeterministicRng;
+    /// use weavegraph::utils::deterministic_rng::DeterministicRng;
     ///
     /// let mut rng = DeterministicRng::new(42);
     /// let id = rng.random_alphanumeric(12);

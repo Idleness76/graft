@@ -2,8 +2,8 @@ volumes:
   ollama_data:
     external: true
 networks:
-  graft:
-    name: graft
+  weavegraph:
+    name: weavegraph
 
 services:
   ollama:
@@ -14,7 +14,7 @@ services:
     ports:
       - "11434:11434"
     networks:
-      - graft
+      - weavegraph
     restart: unless-stopped
     tty: true
     environment:

@@ -1,4 +1,4 @@
-//! Utilities module for common functionality across the Graft framework.
+//! Utilities module for common functionality across the Weavegraph framework.
 //!
 //! This module provides reusable utilities and common patterns that are used
 //! throughout the codebase. These utilities are designed to be generic,
@@ -28,7 +28,7 @@
 //!
 //! ## Extra Data Maps
 //! ```rust
-//! use graft::utils::collections::{new_extra_map, ExtraMapExt};
+//! use weavegraph::utils::collections::{new_extra_map, ExtraMapExt};
 //!
 //! let mut extra = new_extra_map();
 //! extra.insert_string("key", "value");
@@ -37,7 +37,7 @@
 //!
 //! ## ID Generation
 //! ```rust
-//! use graft::utils::id_generator::IdGenerator;
+//! use weavegraph::utils::id_generator::IdGenerator;
 //!
 //! let generator = IdGenerator::new();
 //! let run_id = generator.generate_run_id();
@@ -46,7 +46,7 @@
 //!
 //! ## Time Abstraction
 //! ```rust
-//! use graft::utils::clock::{Clock, SystemClock, MockClock};
+//! use weavegraph::utils::clock::{Clock, SystemClock, MockClock};
 //!
 //! // Production
 //! let clock = SystemClock;

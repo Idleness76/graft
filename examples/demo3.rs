@@ -1,7 +1,7 @@
 //! Demo 3: LLM Integration with Modern Runtime Configuration
 //!
 //! This demonstration showcases integration of Large Language Models (LLMs) with 
-//! the Graft workflow framework, featuring modern runtime configuration patterns,
+//! the Weavegraph workflow framework, featuring modern runtime configuration patterns,
 //! persistent checkpointing, and conditional execution flows. This demo builds on
 //! the previous examples while introducing real-world AI agent patterns.
 //!
@@ -27,13 +27,13 @@
 //! cargo run --example demo3
 //! ```
 
-use graft::channels::{Channel, errors::pretty_print};
-use graft::graph::GraphBuilder;
-use graft::message::Message;
-use graft::node::{Node, NodeContext, NodeError, NodePartial};
-use graft::runtimes::{CheckpointerType, RuntimeConfig};
-use graft::state::{StateSnapshot, VersionedState};
-use graft::types::NodeKind;
+use weavegraph::channels::{Channel, errors::pretty_print};
+use weavegraph::graph::GraphBuilder;
+use weavegraph::message::Message;
+use weavegraph::node::{Node, NodeContext, NodeError, NodePartial};
+use weavegraph::runtimes::{CheckpointerType, RuntimeConfig};
+use weavegraph::state::{StateSnapshot, VersionedState};
+use weavegraph::types::NodeKind;
 use async_trait::async_trait;
 use miette::Result;
 use rig::client::CompletionClient;
@@ -304,7 +304,7 @@ async fn demo() -> Result<()> {
     let runtime_config = RuntimeConfig::new(
         Some("llm_demo_session".to_string()),
         Some(CheckpointerType::SQLite),
-        Some("graft_demo3.db".to_string()),
+        Some("weavegraph_demo3.db".to_string()),
     );
 
     println!("   ✓ Runtime configured with persistent checkpointing");
@@ -430,7 +430,7 @@ async fn demo() -> Result<()> {
     println!("   ✓ State persisted to SQLite database: {:?}", 
              app.runtime_config().sqlite_db_name
                  .as_ref()
-                 .unwrap_or(&"graft.db".to_string()));
+                 .unwrap_or(&"weavegraph.db".to_string()));
     println!("   ✓ Session ID: {:?}", 
              app.runtime_config().session_id
                  .as_ref()

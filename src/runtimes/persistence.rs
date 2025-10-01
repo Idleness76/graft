@@ -1,5 +1,5 @@
 /*!
-Persistence primitives for serializing/deserializing Graft runtime
+Persistence primitives for serializing/deserializing Weavegraph runtime
 state and checkpoints (used by the SQLite checkpointer and any future
 persistent backends).
 
@@ -122,14 +122,14 @@ use thiserror::Error;
 pub enum PersistenceError {
     #[error("missing field: {0}")]
     #[diagnostic(
-        code(graft::persistence::missing_field),
+        code(weavegraph::persistence::missing_field),
         help("Populate the field in the persisted JSON before conversion.")
     )]
     MissingField(&'static str),
 
     #[error("JSON serialization/deserialization failed: {source}")]
     #[diagnostic(
-        code(graft::persistence::serde),
+        code(weavegraph::persistence::serde),
         help("Ensure the JSON structure matches Persisted* types.")
     )]
     Serde {
@@ -138,7 +138,7 @@ pub enum PersistenceError {
     },
 
     #[error("persistence error: {0}")]
-    #[diagnostic(code(graft::persistence::other))]
+    #[diagnostic(code(weavegraph::persistence::other))]
     Other(String),
 }
 

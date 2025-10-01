@@ -1,4 +1,4 @@
-//! Collection utilities and common patterns for the Graft framework.
+//! Collection utilities and common patterns for the Weavegraph framework.
 //!
 //! This module provides type-safe, ergonomic utilities for working with
 //! common collection patterns throughout the codebase, particularly for
@@ -15,7 +15,7 @@ use thiserror::Error;
 pub enum CollectionError {
     /// Attempted to access a key that doesn't exist.
     #[error("Key '{key}' not found in collection")]
-    #[diagnostic(code(graft::collections::missing_key))]
+    #[diagnostic(code(weavegraph::collections::missing_key))]
     MissingKey {
         /// The key that was not found
         key: String,
@@ -23,7 +23,7 @@ pub enum CollectionError {
 
     /// Invalid type conversion during value extraction.
     #[error("Invalid type conversion for key '{key}': expected {expected}, found {found}")]
-    #[diagnostic(code(graft::collections::type_mismatch))]
+    #[diagnostic(code(weavegraph::collections::type_mismatch))]
     TypeMismatch {
         /// The key where the type mismatch occurred
         key: String,
@@ -35,7 +35,7 @@ pub enum CollectionError {
 
     /// JSON serialization/deserialization error.
     #[error("JSON operation failed: {source}")]
-    #[diagnostic(code(graft::collections::json))]
+    #[diagnostic(code(weavegraph::collections::json))]
     Json {
         /// The underlying JSON error
         #[from]
@@ -51,7 +51,7 @@ pub enum CollectionError {
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::collections::new_extra_map;
+/// use weavegraph::utils::collections::new_extra_map;
 /// use serde_json::json;
 ///
 /// let mut extra = new_extra_map();
@@ -78,7 +78,7 @@ pub fn new_extra_map() -> FxHashMap<String, Value> {
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::collections::new_extra_map_with_capacity;
+/// use weavegraph::utils::collections::new_extra_map_with_capacity;
 ///
 /// // Pre-allocate for known size
 /// let mut extra = new_extra_map_with_capacity(10);
@@ -102,7 +102,7 @@ pub fn new_extra_map_with_capacity(capacity: usize) -> FxHashMap<String, Value> 
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::collections::extra_map_from_pairs;
+/// use weavegraph::utils::collections::extra_map_from_pairs;
 /// use serde_json::json;
 ///
 /// let extra = extra_map_from_pairs([
@@ -137,7 +137,7 @@ where
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::collections::{new_extra_map, merge_extra_maps};
+/// use weavegraph::utils::collections::{new_extra_map, merge_extra_maps};
 /// use serde_json::json;
 ///
 /// let mut map1 = new_extra_map();
@@ -168,7 +168,7 @@ where
 /// This trait provides convenient methods for inserting and retrieving typed values
 /// from JSON-based extra data maps. It's designed specifically for the common pattern
 /// of storing heterogeneous data in `FxHashMap<String, Value>` structures throughout
-/// the Graft framework.
+/// the Weavegraph framework.
 ///
 /// # Design Principles
 ///
@@ -180,7 +180,7 @@ where
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::collections::{new_extra_map, ExtraMapExt};
+/// use weavegraph::utils::collections::{new_extra_map, ExtraMapExt};
 ///
 /// let mut extra = new_extra_map();
 ///
@@ -211,7 +211,7 @@ pub trait ExtraMapExt {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::utils::collections::{new_extra_map, ExtraMapExt};
+    /// use weavegraph::utils::collections::{new_extra_map, ExtraMapExt};
     ///
     /// let mut extra = new_extra_map();
     /// extra.insert_string("username", "alice123");
@@ -231,7 +231,7 @@ pub trait ExtraMapExt {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::utils::collections::{new_extra_map, ExtraMapExt};
+    /// use weavegraph::utils::collections::{new_extra_map, ExtraMapExt};
     /// use serde_json::Number;
     ///
     /// let mut extra = new_extra_map();
@@ -252,7 +252,7 @@ pub trait ExtraMapExt {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::utils::collections::{new_extra_map, ExtraMapExt};
+    /// use weavegraph::utils::collections::{new_extra_map, ExtraMapExt};
     ///
     /// let mut extra = new_extra_map();
     /// extra.insert_bool("enabled", true);
@@ -277,7 +277,7 @@ pub trait ExtraMapExt {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::utils::collections::{new_extra_map, ExtraMapExt};
+    /// use weavegraph::utils::collections::{new_extra_map, ExtraMapExt};
     /// use serde::Serialize;
     ///
     /// #[derive(Serialize)]
@@ -316,7 +316,7 @@ pub trait ExtraMapExt {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::utils::collections::{new_extra_map, ExtraMapExt};
+    /// use weavegraph::utils::collections::{new_extra_map, ExtraMapExt};
     ///
     /// let mut extra = new_extra_map();
     /// extra.insert_string("name", "Alice");
@@ -373,7 +373,7 @@ pub trait ExtraMapExt {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::utils::collections::{new_extra_map, ExtraMapExt};
+    /// use weavegraph::utils::collections::{new_extra_map, ExtraMapExt};
     /// use serde::{Deserialize, Serialize};
     ///
     /// #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -407,7 +407,7 @@ pub trait ExtraMapExt {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::utils::collections::{new_extra_map, ExtraMapExt};
+    /// use weavegraph::utils::collections::{new_extra_map, ExtraMapExt};
     ///
     /// let mut extra = new_extra_map();
     /// extra.insert_string("name", "Alice");
@@ -566,7 +566,7 @@ impl ExtraMapExt for FxHashMap<String, Value> {
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::collections::StringMapExt;
+/// use weavegraph::utils::collections::StringMapExt;
 /// use rustc_hash::FxHashMap;
 ///
 /// let mut config: FxHashMap<String, i32> = FxHashMap::default();
@@ -600,7 +600,7 @@ pub trait StringMapExt<V> {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::utils::collections::StringMapExt;
+    /// use weavegraph::utils::collections::StringMapExt;
     /// use std::collections::HashMap;
     ///
     /// let mut settings = HashMap::new();
@@ -630,7 +630,7 @@ pub trait StringMapExt<V> {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::utils::collections::StringMapExt;
+    /// use weavegraph::utils::collections::StringMapExt;
     /// use rustc_hash::FxHashMap;
     ///
     /// let mut counters = FxHashMap::default();
@@ -703,7 +703,7 @@ impl<V> StringMapExt<V> for FxHashMap<String, V> {
     /// This implementation leverages FxHashMap's entry API for efficient
     /// insert-or-update operations. The behavior is identical to HashMap's
     /// implementation but benefits from FxHashMap's faster hashing for string keys.
-    /// This is particularly beneficial in the Graft framework where string keys are common.
+    /// This is particularly beneficial in the Weavegraph framework where string keys are common.
     fn insert_or_update<F>(&mut self, key: String, value: V, update_fn: F)
     where
         F: FnOnce(&mut V),

@@ -2,7 +2,7 @@
 //!
 //! Provides a mockable time source that wraps chrono for system time operations.
 //! This abstraction enables deterministic testing and dependency injection for
-//! time-sensitive functionality throughout the Graft framework.
+//! time-sensitive functionality throughout the Weavegraph framework.
 
 use chrono::{DateTime, Utc};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -39,7 +39,7 @@ pub trait Clock: Send + Sync {
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::clock::{Clock, SystemClock};
+/// use weavegraph::utils::clock::{Clock, SystemClock};
 ///
 /// let clock = SystemClock;
 /// let timestamp = clock.now();
@@ -72,7 +72,7 @@ impl Clock for SystemClock {
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::clock::{Clock, MockClock};
+/// use weavegraph::utils::clock::{Clock, MockClock};
 /// use std::time::Duration;
 ///
 /// let mut clock = MockClock::new(1000);
@@ -124,7 +124,7 @@ impl MockClock {
     ///
     /// # Examples
     /// ```rust
-    /// use graft::utils::clock::{Clock, MockClock};
+    /// use weavegraph::utils::clock::{Clock, MockClock};
     /// use std::time::Duration;
     ///
     /// let mut clock = MockClock::new(0);
@@ -192,7 +192,7 @@ impl Clock for MockClock {
 /// # Examples
 ///
 /// ```rust
-/// use graft::utils::clock::create_clock;
+/// use weavegraph::utils::clock::create_clock;
 ///
 /// // System clock for production
 /// let sys_clock = create_clock(false, 0);
@@ -224,7 +224,7 @@ pub mod time_utils {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::utils::clock::time_utils::format_timestamp;
+    /// use weavegraph::utils::clock::time_utils::format_timestamp;
     ///
     /// let formatted = format_timestamp(1640995200); // 2022-01-01 00:00:00 UTC
     /// assert!(formatted.contains("2022"));

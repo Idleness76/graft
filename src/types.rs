@@ -1,6 +1,6 @@
-//! Core types for the Graft workflow framework.
+//! Core types for the Weavegraph workflow framework.
 //!
-//! This module defines the fundamental types used throughout the Graft system
+//! This module defines the fundamental types used throughout the Weavegraph system
 //! for identifying nodes and channels in workflow graphs. These are the core
 //! domain concepts that define what a workflow *is*.
 //!
@@ -13,7 +13,7 @@
 //!
 //! # Type Organization
 //!
-//! Graft organizes types by conceptual domain:
+//! Weavegraph organizes types by conceptual domain:
 //!
 //! - **Core types** (this module): Fundamental workflow concepts (`NodeKind`, `ChannelType`)
 //! - **Runtime types** ([`crate::runtimes::types`]): Execution infrastructure (`SessionId`, `StepNumber`)
@@ -22,7 +22,7 @@
 //! # Examples
 //!
 //! ```rust
-//! use graft::types::{NodeKind, ChannelType};
+//! use weavegraph::types::{NodeKind, ChannelType};
 //!
 //! // Create different types of nodes
 //! let start = NodeKind::Start;
@@ -55,7 +55,7 @@ use std::fmt;
 /// # Examples
 ///
 /// ```rust
-/// use graft::types::NodeKind;
+/// use weavegraph::types::NodeKind;
 ///
 /// // Special workflow nodes
 /// let start = NodeKind::Start;
@@ -101,7 +101,7 @@ impl NodeKind {
     /// # Examples
     ///
     /// ```rust
-    /// # use graft::types::NodeKind;
+    /// # use weavegraph::types::NodeKind;
     /// assert_eq!(NodeKind::Start.encode(), "Start");
     /// assert_eq!(NodeKind::Other("Processor".to_string()).encode(), "Other:Processor");
     /// ```
@@ -122,7 +122,7 @@ impl NodeKind {
     /// # Examples
     ///
     /// ```rust
-    /// # use graft::types::NodeKind;
+    /// # use weavegraph::types::NodeKind;
     /// assert_eq!(NodeKind::decode("Start"), NodeKind::Start);
     /// assert_eq!(NodeKind::decode("Other:Processor"), NodeKind::Other("Processor".to_string()));
     ///
@@ -179,7 +179,7 @@ impl fmt::Display for NodeKind {
 /// # Examples
 ///
 /// ```rust
-/// use graft::types::ChannelType;
+/// use weavegraph::types::ChannelType;
 ///
 /// let msg_channel = ChannelType::Message;
 /// let err_channel = ChannelType::Error;

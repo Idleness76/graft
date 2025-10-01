@@ -1,7 +1,7 @@
 //! Demo 1: Basic Graph Building and Execution
 //!
 //! This demonstration showcases the fundamental graph building and execution patterns
-//! in the Graft framework. It covers basic workflow construction, state management,
+//! in the Weavegraph framework. It covers basic workflow construction, state management,
 //! barrier operations, and error handling scenarios.
 //!
 //! What You'll Learn:
@@ -17,12 +17,12 @@
 //! ```
 
 use async_trait::async_trait;
-use graft::channels::Channel;
-use graft::graph::GraphBuilder;
-use graft::message::Message;
-use graft::node::{Node, NodeContext, NodeError, NodePartial};
-use graft::state::{StateSnapshot, VersionedState};
-use graft::types::NodeKind;
+use weavegraph::channels::Channel;
+use weavegraph::graph::GraphBuilder;
+use weavegraph::message::Message;
+use weavegraph::node::{Node, NodeContext, NodeError, NodePartial};
+use weavegraph::state::{StateSnapshot, VersionedState};
+use weavegraph::types::NodeKind;
 use miette::Result;
 use rustc_hash::FxHashMap;
 use serde_json::json;
@@ -123,7 +123,7 @@ async fn demo() -> Result<()> {
 
     // Using the builder pattern for rich initial state
     let init = VersionedState::builder()
-        .with_user_message("Hello, Graft workflow system!")
+        .with_user_message("Hello, Weavegraph workflow system!")
         .with_extra("numbers", json!([1, 2, 3]))
         .with_extra(
             "metadata",

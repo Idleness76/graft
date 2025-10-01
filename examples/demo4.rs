@@ -27,13 +27,13 @@
 //! cargo run --example demo4
 //! ```
 
-use graft::channels::{Channel, errors::{ErrorEvent, ErrorScope, LadderError, pretty_print}};
-use graft::graph::GraphBuilder;
-use graft::message::Message;
-use graft::node::{Node, NodeContext, NodeError, NodePartial};
-use graft::runtimes::{CheckpointerType, RuntimeConfig};
-use graft::state::{StateSnapshot, VersionedState};
-use graft::types::NodeKind;
+use weavegraph::channels::{Channel, errors::{ErrorEvent, ErrorScope, LadderError, pretty_print}};
+use weavegraph::graph::GraphBuilder;
+use weavegraph::message::Message;
+use weavegraph::node::{Node, NodeContext, NodeError, NodePartial};
+use weavegraph::runtimes::{CheckpointerType, RuntimeConfig};
+use weavegraph::state::{StateSnapshot, VersionedState};
+use weavegraph::types::NodeKind;
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use miette::Result;
@@ -734,7 +734,7 @@ async fn demo() -> Result<()> {
     let runtime_config = RuntimeConfig::new(
         Some("streaming_demo_advanced".to_string()),
         Some(CheckpointerType::SQLite),
-        Some("graft_demo4_streaming.db".to_string()),
+        Some("weavegraph_demo4_streaming.db".to_string()),
     );
 
     println!("   ✓ Production runtime configured");
@@ -943,7 +943,7 @@ async fn demo() -> Result<()> {
     let db_path = app.runtime_config().sqlite_db_name
         .as_ref()
         .cloned()
-        .unwrap_or_else(|| "graft.db".to_string());
+        .unwrap_or_else(|| "weavegraph.db".to_string());
     
     println!("   ✅ Workflow state persisted to: {}", db_path);
     println!("   ✅ Session ID: {:?}", 
@@ -971,7 +971,7 @@ async fn demo() -> Result<()> {
     println!("   🤖 Demo 3: LLM integration with runtime configuration");
     println!("   🚀 Demo 4: Advanced streaming with error persistence");
     println!("\n💡 These demos provide a comprehensive foundation for building");
-    println!("   production-ready AI agent workflows with Graft!");
+    println!("   production-ready AI agent workflows with Weavegraph!");
 
     Ok(())
 }

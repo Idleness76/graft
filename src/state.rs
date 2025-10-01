@@ -1,4 +1,4 @@
-//! State management for the Graft workflow framework.
+//! State management for the Weavegraph workflow framework.
 //!
 //! This module provides versioned state management with multiple channels
 //! for different types of workflow data. State is managed through versioned
@@ -19,8 +19,8 @@
 //! # Examples
 //!
 //! ```rust
-//! use graft::state::VersionedState;
-//! use graft::channels::Channel;
+//! use weavegraph::state::VersionedState;
+//! use weavegraph::channels::Channel;
 //! use serde_json::json;
 //!
 //! // Create initial state with user message
@@ -58,9 +58,9 @@ use crate::{
 /// # Examples
 ///
 /// ```rust
-/// use graft::state::VersionedState;
-/// use graft::message::Message;
-/// use graft::channels::Channel;
+/// use weavegraph::state::VersionedState;
+/// use weavegraph::message::Message;
+/// use weavegraph::channels::Channel;
 /// use serde_json::json;
 ///
 /// // Initialize with user message
@@ -116,8 +116,8 @@ pub struct VersionedState {
 /// # Examples
 ///
 /// ```rust
-/// use graft::state::VersionedState;
-/// use graft::channels::Channel;
+/// use weavegraph::state::VersionedState;
+/// use weavegraph::channels::Channel;
 /// use serde_json::json;
 ///
 /// let mut state = VersionedState::new_with_user_message("Hello");
@@ -167,7 +167,7 @@ impl VersionedState {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::state::VersionedState;
+    /// use weavegraph::state::VersionedState;
     ///
     /// let state = VersionedState::new_with_user_message("Analyze this data");
     /// let snapshot = state.snapshot();
@@ -198,8 +198,8 @@ impl VersionedState {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::state::VersionedState;
-    /// use graft::channels::Channel;
+    /// use weavegraph::state::VersionedState;
+    /// use weavegraph::channels::Channel;
     /// use serde_json::json;
     ///
     /// let state = VersionedState::builder()
@@ -231,7 +231,7 @@ impl VersionedState {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::state::VersionedState;
+    /// use weavegraph::state::VersionedState;
     ///
     /// let mut state = VersionedState::new_with_user_message("Initial message");
     /// state.add_message("assistant", "I understand your request.");
@@ -263,8 +263,8 @@ impl VersionedState {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::state::VersionedState;
-    /// use graft::channels::Channel;
+    /// use weavegraph::state::VersionedState;
+    /// use weavegraph::channels::Channel;
     /// use serde_json::json;
     ///
     /// let mut state = VersionedState::new_with_user_message("Test");
@@ -301,8 +301,8 @@ impl VersionedState {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::state::VersionedState;
-    /// use graft::channels::Channel;
+    /// use weavegraph::state::VersionedState;
+    /// use weavegraph::channels::Channel;
     /// use serde_json::json;
     ///
     /// let mut state = VersionedState::new_with_user_message("Test");
@@ -338,8 +338,8 @@ impl VersionedState {
 /// # Examples
 ///
 /// ```rust
-/// use graft::state::VersionedState;
-/// use graft::channels::Channel;
+/// use weavegraph::state::VersionedState;
+/// use weavegraph::channels::Channel;
 /// use serde_json::json;
 ///
 /// let state = VersionedState::builder()
@@ -375,7 +375,7 @@ impl VersionedStateBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::state::VersionedState;
+    /// use weavegraph::state::VersionedState;
     ///
     /// let state = VersionedState::builder()
     ///     .with_user_message("Hello")
@@ -398,7 +398,7 @@ impl VersionedStateBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::state::VersionedState;
+    /// use weavegraph::state::VersionedState;
     ///
     /// let state = VersionedState::builder()
     ///     .with_user_message("Hello")
@@ -422,7 +422,7 @@ impl VersionedStateBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::state::VersionedState;
+    /// use weavegraph::state::VersionedState;
     ///
     /// let state = VersionedState::builder()
     ///     .with_system_message("Session started")
@@ -447,7 +447,7 @@ impl VersionedStateBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::state::VersionedState;
+    /// use weavegraph::state::VersionedState;
     ///
     /// let state = VersionedState::builder()
     ///     .with_message("function", "API call result")
@@ -471,7 +471,7 @@ impl VersionedStateBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::state::VersionedState;
+    /// use weavegraph::state::VersionedState;
     /// use serde_json::json;
     ///
     /// let state = VersionedState::builder()
@@ -497,7 +497,7 @@ impl VersionedStateBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use graft::state::VersionedState;
+    /// use weavegraph::state::VersionedState;
     /// use serde_json::json;
     ///
     /// let state = VersionedState::builder()
