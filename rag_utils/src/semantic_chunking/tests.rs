@@ -37,7 +37,7 @@ struct CountingProvider {
 }
 
 impl CountingProvider {
-    fn new() -> (SharedEmbeddingProvider, std::sync::Arc<AtomicUsize>) {
+    fn new_with_counter() -> (SharedEmbeddingProvider, std::sync::Arc<AtomicUsize>) {
         let counter = std::sync::Arc::new(AtomicUsize::new(0));
         let provider = CountingProvider {
             calls: counter.clone(),
@@ -85,7 +85,7 @@ async fn json_chunker_produces_chunks() {
     assert!(outcome.stats.total_segments >= outcome.stats.total_chunks);
     assert!(outcome.trace.is_some());
     let first = &outcome.chunks[0];
-    assert!(first.metadata.extra.get("segment_paths").is_some());
+    assert!(first.metadata.extra.contains_key("segment_paths"));
 }
 
 #[tokio::test]
@@ -165,8 +165,10 @@ async fn html_chunker_handles_table_fixture() {
 #[tokio::test]
 async fn json_chunker_uses_segtok_splitter() {
     let chunker = JsonSemanticChunker::new(mock_embedder(), JsonPreprocessConfig::default());
-    let mut cfg = ChunkingConfig::default();
-    cfg.sentence_splitter = SentenceSplitter::Segtok;
+    let cfg = ChunkingConfig {
+        sentence_splitter: SentenceSplitter::Segtok,
+        ..ChunkingConfig::default()
+    };
     let payload: Value = serde_json::from_str(JSON_FIXTURE).unwrap();
 
     let outcome = chunker.chunk(payload, &cfg).await.unwrap();
@@ -175,7 +177,7 @@ async fn json_chunker_uses_segtok_splitter() {
 
 #[tokio::test]
 async fn json_chunker_handles_fixture_multiple_runs_with_cache() {
-    let (embedder, calls) = CountingProvider::new();
+    let (embedder, calls) = CountingProvider::new_with_counter();
     let chunker =
         JsonSemanticChunker::new(embedder, JsonPreprocessConfig::default()).with_cache_capacity(32);
     let cfg = ChunkingConfig::default();
@@ -256,10 +258,12 @@ async fn json_chunker_falls_back_to_lexical() {
         std::sync::Arc::new(FailingProvider),
         JsonPreprocessConfig::default(),
     );
-    let mut cfg = ChunkingConfig::default();
-    cfg.fallback_to_lexical = true;
-    cfg.cache_capacity = Some(0);
-    cfg.sentence_splitter = SentenceSplitter::Regex;
+    let cfg = ChunkingConfig {
+        fallback_to_lexical: true,
+        cache_capacity: Some(0),
+        sentence_splitter: SentenceSplitter::Regex,
+        ..ChunkingConfig::default()
+    };
     let payload: Value = serde_json::from_str(JSON_METRICS_FIXTURE).unwrap();
 
     let outcome = chunker.chunk(payload, &cfg).await.unwrap();
@@ -277,10 +281,12 @@ async fn html_chunker_falls_back_to_lexical() {
         std::sync::Arc::new(FailingProvider),
         HtmlPreprocessConfig::default(),
     );
-    let mut cfg = ChunkingConfig::default();
-    cfg.fallback_to_lexical = true;
-    cfg.cache_capacity = Some(0);
-    cfg.sentence_splitter = SentenceSplitter::Regex;
+    let cfg = ChunkingConfig {
+        fallback_to_lexical: true,
+        cache_capacity: Some(0),
+        sentence_splitter: SentenceSplitter::Regex,
+        ..ChunkingConfig::default()
+    };
 
     let outcome = chunker
         .chunk(HTML_TABLE_FIXTURE.to_string(), &cfg)

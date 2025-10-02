@@ -228,7 +228,7 @@ pub async fn run_demo5() -> Result<()> {
     }
 
     let http_client = HttpClient::builder()
-        .user_agent("Graft-RustBook-Demo/0.1")
+        .user_agent("weavegraph-RustBook-Demo/0.1")
         .build()
         .into_diagnostic()?;
 
@@ -917,7 +917,7 @@ impl Node for GenerateAnswerNode {
         for content in response.choice.into_iter() {
             if let AssistantContent::Text(text) = content {
                 if !combined.is_empty() {
-                    combined.push_str("\n");
+                    combined.push('\n');
                 }
                 combined.push_str(text.text());
             }

@@ -1,16 +1,16 @@
 [package]
-name = "graft"
+name = "weavegraph"
 version = "0.1.0"
 edition = "2021"
 description = "Graph-driven, concurrent agent workflow framework with versioned state, deterministic barrier merges, and rich diagnostics."
 license = "MIT"
-repository = "https://github.com/Idleness76/graft"
+repository = "https://github.com/Idleness76/weavegraph"
 readme = "README.md"
 keywords = ["graph","workflow","concurrency","agents","tracing"]
 categories = ["concurrency","data-structures","algorithms"]
 rust-version = "1.83"
-homepage = "https://github.com/Idleness76/graft"
-documentation = "https://docs.rs/graft"
+homepage = "https://github.com/Idleness76/weavegraph"
+documentation = "https://docs.rs/weavegraph"
 
 [dev-dependencies]
 proptest = "1"
@@ -23,7 +23,7 @@ rag_utils = { path = "../rag_utils" }
 miette = { version = "7.6", features = ["fancy"] }
 thiserror = "2"
 
-# Tracing & logging  
+# Tracing & logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "ansi"] }
 tracing-error = "0.2"
@@ -60,7 +60,7 @@ tokio-rusqlite = { version = "0.6", features = ["bundled"] }
 # Database
 sqlx = { version = "0.8", features = [
     "runtime-tokio-rustls",
-    "sqlite", 
+    "sqlite",
     "macros",
     "uuid",
     "chrono",

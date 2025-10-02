@@ -1,5 +1,6 @@
 use once_cell::sync::OnceCell;
 use std::mem::transmute;
+use std::os::raw::c_char;
 use tokio_rusqlite::{ffi, Connection, Result};
 
 #[tokio::main]
@@ -114,7 +115,7 @@ async fn main() -> Result<()> {
     match embedding_query_result {
         Ok(results) => {
             println!("\n=== Chunks with Embeddings ===");
-            println!("{:<37} | {:<48} | {}", "ID", "Preview", "Embedding Preview");
+            println!("{:<37} | {:<48} | Embedding Preview", "ID", "Preview");
             println!("{:-<37}-|-{:-<48}-|{:-<50}", "", "", "");
             for (id, preview, embedding_preview) in results {
                 println!("{:<37} | {:<48} | {}", id, preview, embedding_preview);
@@ -133,8 +134,16 @@ fn register_sqlite_vec() -> std::result::Result<(), String> {
     REGISTER
         .get_or_try_init(|| {
             unsafe {
+                type SqliteExtensionInit = unsafe extern "C" fn(
+                    *mut ffi::sqlite3,
+                    *mut *mut c_char,
+                    *const ffi::sqlite3_api_routines,
+                ) -> i32;
+
                 let init: unsafe extern "C" fn() = sqlite_vec::sqlite3_vec_init;
-                let rc = ffi::sqlite3_auto_extension(Some(transmute(init as *const ())));
+                let init_fn: SqliteExtensionInit =
+                    transmute::<unsafe extern "C" fn(), SqliteExtensionInit>(init);
+                let rc = ffi::sqlite3_auto_extension(Some(init_fn));
                 if rc != 0 {
                     return Err(format!(
                         "failed to register sqlite-vec extension (code {})",

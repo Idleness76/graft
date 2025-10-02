@@ -1,10 +1,10 @@
 // Demo modules are currently commented out
-// use graft::{run_demo1, run_demo2, run_demo3, run_demo4};
-use graft::run_demo5;
+// use weavegraph::{run_demo1, run_demo2, run_demo3, run_demo4};
 use miette::Result;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use weavegraph::run_demo5;
 
 fn init_tracing() {
     let fmt_layer = fmt::layer()

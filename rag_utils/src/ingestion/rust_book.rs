@@ -68,7 +68,7 @@ where
         options: RustBookIngestOptions,
     ) -> Result<Self, RagError> {
         let client = Client::builder()
-            .user_agent("Graft-RustBook-Ingestor/0.1")
+            .user_agent("weavegraph-RustBook-Ingestor/0.1")
             .build()
             .map_err(|err| RagError::Network(err.to_string()))?;
 

@@ -191,9 +191,9 @@ impl SQLiteCheckpointer {
         #[cfg(feature = "sqlite-migrations")]
         {
             if let Err(e) = sqlx::migrate!("../migrations").run(&pool).await {
-                return Err(CheckpointerError::Backend(format!(
-                    "migration failure: {e}"
-                )));
+                return Err(CheckpointerError::Backend {
+                    message: format!("migration failure: {e}"),
+                });
             }
         }
         #[cfg(not(feature = "sqlite-migrations"))]

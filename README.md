@@ -12,7 +12,7 @@ Weavegraph is a modern Rust framework for building complex, stateful workflows u
 
 ## Workspace Layout
 
-- `graft/` – core runtime crate (graphs, schedulers, runners, demos).
+- `weavegraph/` – core runtime crate (graphs, schedulers, runners, demos).
 - `rag_utils/` – semantic chunking + RAG helpers reused by demos and examples.
 
 ## Repo layout (key modules)
@@ -58,9 +58,9 @@ impl Node for GreetingNode {
         ctx: NodeContext,
     ) -> Result<NodePartial, weavegraph::node::NodeError> {
         ctx.emit("greeting", "Generating welcome message")?;
-        
+
         let greeting = Message::assistant("Hello! How can I help you today?");
-        
+
         Ok(NodePartial {
             messages: Some(vec![greeting]),
             extra: None,
@@ -80,12 +80,12 @@ async fn main() -> miette::Result<()> {
     // Create initial state and run
     let state = VersionedState::new_with_user_message("Hello, system!");
     let result = graph.invoke(state).await?;
-    
+
     // Access results
     for message in result.messages {
         println!("{}: {}", message.role, message.content);
     }
-    
+
     Ok(())
 }
 ```
@@ -141,14 +141,14 @@ use weavegraph::graph::GraphBuilder;
 
 let graph = GraphBuilder::new()
     .add_node("input", InputProcessorNode)
-    .add_node("analyze", AnalyzerNode) 
+    .add_node("analyze", AnalyzerNode)
     .add_node("respond", ResponseNode)
     .add_edge("input", "analyze")
     .add_conditional_edge("analyze", |state| {
         if state.extra.contains_key("needs_escalation") {
             "escalate"
         } else {
-            "respond" 
+            "respond"
         }
     })
     .set_entry_point("input")
@@ -178,7 +178,7 @@ Historical demo applications showcase evolution of capabilities:
 # Basic graph execution patterns (examples/demo1.rs)
 cargo run --example demo1
 
-# Direct scheduler usage and barrier synchronization (examples/demo2.rs)  
+# Direct scheduler usage and barrier synchronization (examples/demo2.rs)
 cargo run --example demo2
 
 # LLM workflows with Ollama integration (examples/demo3.rs)
@@ -199,7 +199,7 @@ docker-compose up -d ollama
 Weavegraph is built around several core modules:
 
 - **[`message`]** - Type-safe message construction and role-based messaging
-- **[`state`]** - Versioned state management with channel isolation  
+- **[`state`]** - Versioned state management with channel isolation
 - **[`node`]** - Node execution primitives and async trait definitions
 - **[`graph`]** - Workflow graph definition and conditional routing
 - **[`schedulers`]** - Concurrent execution with dependency resolution
