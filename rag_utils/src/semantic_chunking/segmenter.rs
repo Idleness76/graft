@@ -5,18 +5,13 @@ use regex::Regex;
 #[cfg(feature = "semantic-chunking-segtok")]
 use segtok::segmenter::{split_single, SegmentConfig};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SentenceSplitter {
+    #[default]
     Regex,
     #[cfg(feature = "semantic-chunking-segtok")]
     Segtok,
-}
-
-impl Default for SentenceSplitter {
-    fn default() -> Self {
-        SentenceSplitter::Regex
-    }
 }
 
 pub fn split_sentences(text: &str, mode: SentenceSplitter) -> Vec<String> {

@@ -95,7 +95,7 @@ impl SemanticChunkingService {
         };
 
         let duration_ms = start.elapsed().as_millis();
-        let fallback_used = outcome.trace.as_ref().map_or(false, |trace| {
+        let fallback_used = outcome.trace.as_ref().is_some_and(|trace| {
             trace
                 .events
                 .iter()

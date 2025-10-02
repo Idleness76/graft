@@ -152,20 +152,20 @@ Also integrate with `EventBus` for streaming chunking progress.
 
 ## Runtime Integration Notes (2025-10-01T17:05:00Z)
 - Service layer responsibilities: config layering, embedder resolution (RIG -> `EmbeddingProvider` adapter), document kind detection, and centralised telemetry emission.
-- Builder should accept defaults from `SemanticChunkingModuleConfig`, optional `Arc<dyn EmbeddingModelDyn>` and optional `flume::Sender<Event>` for event bus integrations.
+- Builder should accept defaults from `SemanticChunkingModuleConfig`, optional `Arc<dyn EmbeddingModelDyn>`, and cache configuration controls (capacity toggles, shared handles where needed).
 - Request API will allow overrides per call (chunking config, preprocess knobs, embedder) and accept either raw payloads or filesystem paths; file resolution uses async I/O and extension-based dispatch.
-- Telemetry instrumentation: wrap chunking in `tracing::span!("semantic_chunk").in_scope`, record counters (cache hits/misses, fallback_used, smoothing_window) and emit `Event::diagnostic` updates summarizing the run + optionally serialized `ChunkingTrace`.
-- Response returns `ChunkingOutcome` plus derived telemetry snapshot, exposing the `Vec<SemanticChunk>` for callers to mutate or enrich before persistence.
+- Telemetry instrumentation: wrap chunking in `tracing::span!("semantic_chunk").in_scope`, record counters (cache hits/misses, fallback_used, smoothing_window) and thread them into the returned `ChunkTelemetry` payload; graft remains responsible for streaming these details over its event bus.
+- Response returns `ChunkingOutcome` plus the derived telemetry snapshot, exposing the `Vec<SemanticChunk>` for callers to mutate or enrich before persistence.
 
 ## SemanticChunkingService TODOs (2025-10-01T17:05:00Z)
 - Implement `RigEmbeddingProvider` adapter bridging `rig::embeddings::EmbeddingModel` into existing `EmbeddingProvider` trait (convert `Vec<f64>` to `Vec<f32>`, respect max batch size).
 - Introduce `service.rs` under `semantic_chunking` with builder, request/response structs, telemetry tracking, and dispatch logic to JSON/HTML chunkers.
-  - Builder: surface module defaults, optional shared caches, and allow callers to inject event-bus sender plus embedder handles (RIG or custom `EmbeddingProvider`).
+  - Builder: surface module defaults, optional shared caches (capacity, shared handle reuse), and allow callers to inject embedder handles (RIG or custom `EmbeddingProvider`).
   - Request API: enum to cover inline JSON/HTML/plain text and filesystem paths, with per-call overrides for chunking/preprocess configs and embedder selection.
-  - Execution path: resolve source -> choose chunker -> execute under tracing span -> capture cache metrics + fallback flag -> emit optional telemetry event before returning.
-  - Response: wrap `ChunkingOutcome` alongside a `ChunkTelemetry` struct (durations, cache hit/miss counters, smoothing window, embedder label) so runtimes can forward metrics without recomputing.
-- Add tracing spans and event bus emission for cache hits, lexical fallback, and smoothing to align with runtime observability roadmap.
-- Unit tests covering: JSON string input, HTML file path, lexical fallback when embedder missing, RIG embedding adapter (use minimal fake EmbeddingModel), telemetry events (using memory sink) and config overrides.
+  - Execution path: resolve source -> choose chunker -> execute under tracing span -> capture cache metrics + fallback flag -> populate the telemetry struct before returning.
+  - Response: wrap `ChunkingOutcome` alongside a `ChunkTelemetry` struct (durations, cache hit/miss counters, smoothing window, embedder label) so runtimes can forward metrics without recomputing; no direct event bus dependency lives in `rag_utils`.
+- Add tracing spans for cache hits, lexical fallback, and smoothing to align with runtime observability roadmap; surface the counters via the returned telemetry data.
+- Unit tests covering: JSON string input, HTML file path, lexical fallback when embedder missing, RIG embedding adapter (use minimal fake EmbeddingModel), telemetry snapshots, and config overrides.
 
 ## Rust Book Scraper & Vector Store Ingestion (2025-10-01T18:05:00Z)
 - Build a scraping orchestrator that ingests the full Rust Book and persists chunk embeddings into `rig-sqlite`:
@@ -173,7 +173,7 @@ Also integrate with `EventBus` for streaming chunking progress.
   2. **Download**: retrieve each chapter asynchronously (bounded concurrency/semaphore) with retry/backoff and a custom User-Agent.
   3. **Chunk**: call `SemanticChunkingService::chunk_document(ChunkSource::Html(page_html))` per chapter using a configured RIG embedding model; capture telemetry to track fallback/cache behaviour.
   4. **Persist**: upsert each chunk into a `rig_sqlite::VectorStore`, storing `SemanticChunk` content, metadata (URL, heading chain, segment positions), and embeddings (convert `Vec<f32>` back to `Vec<f64>` or adjust provider to skip downcast).
-  5. **Audit**: log progress via the event bus (per-page diagnostic and aggregate stats), and optionally serialize `ChunkTelemetry` snapshots for monitoring dashboards.
+  5. **Audit**: use graft’s event bus to log progress (per-page diagnostic and aggregate stats), and optionally serialize `ChunkTelemetry` snapshots for monitoring dashboards.
 - CLI entrypoint `cargo run --example ingest_rust_book`:
   - Flags: `--base-url`, `--out-db`, `--embedder <provider>` (OpenAI/Cohere/Ollama), `--concurrency`, `--resume`.
   - Emits telemetry to stdout and writes checkpoint file (list of completed URLs) so reruns skip finished chapters.
@@ -195,14 +195,14 @@ Also integrate with `EventBus` for streaming chunking progress.
    - Respect concurrency limiter via `tokio::sync::Semaphore`; include exponential backoff + retry for transient 5xx.
    - Write optional HTML cache file per URL (hashed path) gated behind `IngestOptions::cache_dir`.
 3. **Chunking pipeline**
-   - Reuse `SemanticChunkingService`; build once with desired embedder + event bus channel.
-   - For each HTML page, call `chunk_document`, convert embeddings to `Vec<f64>` needed by `rig_sqlite`, collect telemetry for logging.
+   - Reuse `SemanticChunkingService`; build once with desired embedder and cache configuration.
+   - For each HTML page, call `chunk_document`, convert embeddings to `Vec<f64>` needed by `rig_sqlite`, collect telemetry for logging/streaming via graft components.
 4. **Vector store integration**
    - Connect to SQLite DB (create if missing); upsert chunks via `vector_store.upsert(&id, embedding, metadata_json)`.
    - Maintain mapping table for chapter URL -> chunk ids to support deletion/resume; simple table using `rusqlite` or store in metadata.
 5. **Example entrypoint (`run_demo5.rs`)**
    - CLI args via `clap` (feature optional) or manual parsing: base URL, DB path, concurrency, resume flag, query prompt.
-   - Ingest pipeline streaming diagnostics to stdout (via event bus memory sink -> print) while populating DB.
+   - Ingest pipeline streams diagnostics to stdout via graft’s event bus while populating DB.
    - After ingest, build `VectorStoreRetriever` and run a sample query (embedding the question) to print top hits with snippet context.
 6. **Testing**
    - Unit: mock HTTP server (two chapter fixtures) verifying that ingest writes expected rows and retrieval returns chunk from fixture.

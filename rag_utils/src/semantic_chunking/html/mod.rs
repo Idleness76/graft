@@ -31,6 +31,16 @@ pub struct HtmlSemanticChunker {
     cache: CacheHandle,
 }
 
+struct AssemblyInputs<'a> {
+    segments: &'a [CandidateSegment],
+    embeddings: Option<&'a [Vec<f32>]>,
+    cfg: &'a ChunkingConfig,
+    scores: &'a [f32],
+    breakpoints: &'a [usize],
+    fallback_used: bool,
+    document_title: Option<&'a String>,
+}
+
 impl HtmlSemanticChunker {
     pub fn new(embedder: SharedEmbeddingProvider, preprocess: HtmlPreprocessConfig) -> Self {
         Self {
@@ -208,15 +218,15 @@ impl HtmlSemanticChunker {
 
     fn assemble_chunks(
         &self,
-        segments: &[CandidateSegment],
-        embeddings: Option<&[Vec<f32>]>,
-        cfg: &ChunkingConfig,
-        scores: &[f32],
-        breakpoints: &[usize],
-        fallback_used: bool,
-        document_title: Option<&String>,
+        inputs: AssemblyInputs<'_>,
     ) -> (Vec<SemanticChunk>, ChunkingTrace, ChunkingStats) {
-        let (ranges, trace) = plan_ranges(segments, scores, breakpoints, cfg, fallback_used);
+        let (ranges, trace) = plan_ranges(
+            inputs.segments,
+            inputs.scores,
+            inputs.breakpoints,
+            inputs.cfg,
+            inputs.fallback_used,
+        );
 
         let mut chunks = Vec::new();
         for (idx, (start, end)) in ranges.iter().enumerate() {
@@ -224,7 +234,7 @@ impl HtmlSemanticChunker {
             let mut dom_paths = Vec::new();
             let mut tags = Vec::new();
             let mut token_total = 0;
-            for segment in &segments[*start..*end] {
+            for segment in &inputs.segments[*start..*end] {
                 if !content.is_empty() {
                     content.push_str("\n\n");
                 }
@@ -239,13 +249,13 @@ impl HtmlSemanticChunker {
             let mut metadata = ChunkMetadata::default();
             metadata.source_path = dom_paths.first().cloned();
             metadata.dom_path = metadata.source_path.clone();
-            if let Some(title) = document_title {
+            if let Some(title) = inputs.document_title {
                 metadata.extra.insert("document_title".into(), json!(title));
             }
             metadata.extra.insert("dom_paths".into(), json!(dom_paths));
             metadata.extra.insert("segment_tags".into(), json!(tags));
 
-            if let Some(heading_list) = segments[*start..*end]
+            if let Some(heading_list) = inputs.segments[*start..*end]
                 .iter()
                 .find_map(|segment| segment.metadata.extra_heading_chain())
             {
@@ -257,7 +267,10 @@ impl HtmlSemanticChunker {
             metadata.extra.insert("chunk_index".into(), json!(idx));
 
             let mut chunk = SemanticChunk::new(content, token_total, metadata);
-            if let Some(emb) = embeddings.and_then(|all| average_embedding(&all[*start..*end])) {
+            if let Some(emb) = inputs
+                .embeddings
+                .and_then(|all| average_embedding(&all[*start..*end]))
+            {
                 chunk.embedding = Some(emb);
             }
             chunks.push(chunk);
@@ -265,7 +278,7 @@ impl HtmlSemanticChunker {
 
         link_neighbors(&mut chunks);
 
-        let stats = compute_stats(&chunks, segments.len());
+        let stats = compute_stats(&chunks, inputs.segments.len());
 
         (chunks, trace, stats)
     }
@@ -381,15 +394,16 @@ let smoothed_scores = crate::semantic_chunking::assembly::smooth_scores(
 );
 
 let breakpoints = detect_breakpoints(&smoothed_scores, cfg);
-let (chunks, trace, stats) = self.assemble_chunks(
-    &segments,
-    embeddings.as_deref(),
+let inputs = AssemblyInputs {
+    segments: &segments,
+    embeddings: embeddings.as_deref(),
     cfg,
-    &smoothed_scores,
-    &breakpoints,
+    scores: &smoothed_scores,
+    breakpoints: &breakpoints,
     fallback_used,
-    title.as_ref(),
-);
+    document_title: title.as_ref(),
+};
+let (chunks, trace, stats) = self.assemble_chunks(inputs);
 
 Ok(ChunkingOutcome {
     chunks,

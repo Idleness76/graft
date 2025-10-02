@@ -1,4 +1,5 @@
 use std::mem::transmute;
+use std::os::raw::c_char;
 use std::path::Path;
 
 use once_cell::sync::OnceCell;
@@ -149,8 +150,16 @@ where
         REGISTER
             .get_or_try_init(|| {
                 unsafe {
+                    type SqliteExtensionInit = unsafe extern "C" fn(
+                        *mut ffi::sqlite3,
+                        *mut *mut c_char,
+                        *const ffi::sqlite3_api_routines,
+                    ) -> i32;
+
                     let init: unsafe extern "C" fn() = sqlite_vec::sqlite3_vec_init;
-                    let rc = ffi::sqlite3_auto_extension(Some(transmute(init as *const ())));
+                    let init_fn: SqliteExtensionInit =
+                        transmute::<unsafe extern "C" fn(), SqliteExtensionInit>(init);
+                    let rc = ffi::sqlite3_auto_extension(Some(init_fn));
                     if rc != 0 {
                         return Err(RagError::Storage(format!(
                             "failed to register sqlite-vec extension (code {rc})"

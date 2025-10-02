@@ -21,6 +21,26 @@ use super::SemanticChunker;
 
 const SEGMENT_TARGET_TOKENS: usize = 160;
 
+struct SegmentContext<'cfg, 'segments> {
+    cfg: &'cfg ChunkingConfig,
+    position: &'segments mut usize,
+    segments: &'segments mut Vec<CandidateSegment>,
+}
+
+impl<'cfg, 'segments> SegmentContext<'cfg, 'segments> {
+    fn new(
+        cfg: &'cfg ChunkingConfig,
+        position: &'segments mut usize,
+        segments: &'segments mut Vec<CandidateSegment>,
+    ) -> Self {
+        Self {
+            cfg,
+            position,
+            segments,
+        }
+    }
+}
+
 /// Semantic chunker for JSON inputs.
 pub struct JsonSemanticChunker {
     embedder: SharedEmbeddingProvider,
@@ -100,22 +120,20 @@ impl JsonSemanticChunker {
         value: &Value,
         path: &str,
         depth: usize,
-        position: &mut usize,
-        cfg: &ChunkingConfig,
-        segments: &mut Vec<CandidateSegment>,
+        ctx: &mut SegmentContext<'_, '_>,
     ) {
         match value {
             Value::Object(map) => {
-                self.process_object(key, map, path, depth, position, cfg, segments);
+                self.process_object(key, map, path, depth, ctx);
             }
             Value::Array(items) => {
-                self.process_array(key, items, path, depth, position, cfg, segments);
+                self.process_array(key, items, path, depth, ctx);
             }
             Value::String(text) => {
-                self.emit_text_segments(key, text, path, depth, position, cfg, segments);
+                self.emit_text_segments(key, text, path, depth, ctx);
             }
             Value::Number(_) | Value::Bool(_) | Value::Null => {
-                self.emit_scalar_segment(key, value, path, depth, position, segments);
+                self.emit_scalar_segment(key, value, path, depth, ctx.position, ctx.segments);
             }
         }
     }
@@ -126,24 +144,14 @@ impl JsonSemanticChunker {
         map: &serde_json::Map<String, Value>,
         path: &str,
         depth: usize,
-        position: &mut usize,
-        cfg: &ChunkingConfig,
-        segments: &mut Vec<CandidateSegment>,
+        ctx: &mut SegmentContext<'_, '_>,
     ) {
         let mut scalar_lines = Vec::new();
         for (child_key, child_value) in map {
             let child_path = format!("{}/{}", path, child_key);
             match child_value {
                 Value::String(text) => {
-                    self.emit_text_segments(
-                        Some(child_key),
-                        text,
-                        &child_path,
-                        depth + 1,
-                        position,
-                        cfg,
-                        segments,
-                    );
+                    self.emit_text_segments(Some(child_key), text, &child_path, depth + 1, ctx);
                 }
                 Value::Object(_) | Value::Array(_) => {
                     self.collect_segments(
@@ -151,9 +159,7 @@ impl JsonSemanticChunker {
                         child_value,
                         &child_path,
                         depth + 1,
-                        position,
-                        cfg,
-                        segments,
+                        ctx,
                     );
                 }
                 _ => {
@@ -176,8 +182,8 @@ impl JsonSemanticChunker {
                 SegmentKind::JsonObject,
                 Some(path.to_string()),
                 depth,
-                position,
-                segments,
+                ctx.position,
+                ctx.segments,
             );
         }
     }
@@ -188,9 +194,7 @@ impl JsonSemanticChunker {
         items: &[Value],
         path: &str,
         depth: usize,
-        position: &mut usize,
-        cfg: &ChunkingConfig,
-        segments: &mut Vec<CandidateSegment>,
+        ctx: &mut SegmentContext<'_, '_>,
     ) {
         let iter: Box<dyn Iterator<Item = (usize, &Value)>> =
             if self.preprocess.flatten_large_arrays {
@@ -212,26 +216,11 @@ impl JsonSemanticChunker {
             let child_path = format!("{}/{}", path, idx);
             match item {
                 Value::String(text) => {
-                    self.emit_text_segments(
-                        Some(&format!("{}[{}]", key.unwrap_or("item"), idx)),
-                        text,
-                        &child_path,
-                        depth + 1,
-                        position,
-                        cfg,
-                        segments,
-                    );
+                    let label = key.map(|k| format!("{}[{}]", k, idx));
+                    self.emit_text_segments(label.as_deref(), text, &child_path, depth + 1, ctx);
                 }
                 Value::Object(_) | Value::Array(_) => {
-                    self.collect_segments(
-                        None,
-                        item,
-                        &child_path,
-                        depth + 1,
-                        position,
-                        cfg,
-                        segments,
-                    );
+                    self.collect_segments(None, item, &child_path, depth + 1, ctx);
                 }
                 _ => {
                     scalar_lines.push(format!("[{}]: {}", idx, self.format_scalar(item)));
@@ -241,7 +230,7 @@ impl JsonSemanticChunker {
 
         if !scalar_lines.is_empty() {
             let header = key
-                .map(|k| format!("{}", k))
+                .map(|k| k.to_string())
                 .unwrap_or_else(|| path.to_string());
             let mut text = format!("{}\n{}", header, scalar_lines.join("\n"));
             if items.len() > scalar_lines.len() {
@@ -252,8 +241,8 @@ impl JsonSemanticChunker {
                 SegmentKind::JsonArray,
                 Some(path.to_string()),
                 depth,
-                position,
-                segments,
+                ctx.position,
+                ctx.segments,
             );
         }
     }
@@ -287,10 +276,9 @@ impl JsonSemanticChunker {
         text: &str,
         path: &str,
         depth: usize,
-        position: &mut usize,
-        cfg: &ChunkingConfig,
-        segments: &mut Vec<CandidateSegment>,
+        ctx: &mut SegmentContext<'_, '_>,
     ) {
+        let cfg = ctx.cfg;
         let target = SEGMENT_TARGET_TOKENS.min(cfg.max_tokens.saturating_sub(cfg.min_tokens));
         let target = target.max(cfg.min_tokens.max(64));
         let parts = self.split_text(text, target, cfg);
@@ -304,8 +292,8 @@ impl JsonSemanticChunker {
                 SegmentKind::JsonValue,
                 Some(path.to_string()),
                 depth,
-                position,
-                segments,
+                ctx.position,
+                ctx.segments,
             );
         }
     }
@@ -559,7 +547,8 @@ impl SemanticChunker for JsonSemanticChunker {
         async move {
             let mut segments = Vec::new();
             let mut position = 0usize;
-            self.collect_segments(None, &source, "/", 0, &mut position, cfg, &mut segments);
+            let mut context = SegmentContext::new(cfg, &mut position, &mut segments);
+            self.collect_segments(None, &source, "/", 0, &mut context);
 
             if segments.is_empty() {
                 return Ok(ChunkingOutcome::empty());
@@ -642,8 +631,12 @@ let (ranges, trace) = plan_ranges(
                     token_total += segment.tokens;
                 }
 
-                let mut metadata = ChunkMetadata::default();
-                metadata.source_path = paths.first().cloned();
+                let primary_path = paths.first().cloned();
+                let mut metadata = ChunkMetadata {
+                    source_path: primary_path.clone(),
+                    dom_path: primary_path,
+                    ..Default::default()
+                };
                 metadata
                     .extra
                     .insert("segment_paths".into(), serde_json::json!(paths));

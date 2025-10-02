@@ -60,16 +60,14 @@ pub fn sanitize_html(input: &str, cfg: &HtmlPreprocessConfig) -> SanitizedHtml {
     let mut position = 0usize;
 
     let root = document.root_element();
-    traverse_element(
-        root,
-        &mut path_stack,
-        0,
-        &drop_tags,
+    let mut state = TraverseState {
+        drop_tags: &drop_tags,
         cfg,
-        &mut heading_stack,
-        &mut position,
-        &mut blocks,
-    );
+        heading_stack: &mut heading_stack,
+        position: &mut position,
+        blocks: &mut blocks,
+    };
+    traverse_element(root, &mut path_stack, 0, &mut state);
 
     SanitizedHtml { title, blocks }
 }
@@ -86,59 +84,70 @@ fn extract_title(document: &Html) -> Option<String> {
     }
 }
 
+struct TraverseState<'a> {
+    drop_tags: &'a HashSet<String>,
+    cfg: &'a HtmlPreprocessConfig,
+    heading_stack: &'a mut Vec<(usize, String)>,
+    position: &'a mut usize,
+    blocks: &'a mut Vec<BlockCandidate>,
+}
+
 fn traverse_element(
     element: ElementRef,
     path_stack: &mut Vec<String>,
     depth: usize,
-    drop_tags: &HashSet<String>,
-    cfg: &HtmlPreprocessConfig,
-    heading_stack: &mut Vec<(usize, String)>,
-    position: &mut usize,
-    blocks: &mut Vec<BlockCandidate>,
+    state: &mut TraverseState<'_>,
 ) {
     let tag = element.value().name().to_ascii_lowercase();
-    if drop_tags.contains(&tag) {
+    if state.drop_tags.contains(&tag) {
         return;
     }
 
     let dom_path = path_stack.join(" > ");
-    let mut heading_chain_snapshot: Vec<String> =
-        heading_stack.iter().map(|(_, text)| text.clone()).collect();
+    let mut heading_chain_snapshot: Vec<String> = state
+        .heading_stack
+        .iter()
+        .map(|(_, text)| text.clone())
+        .collect();
 
     if let Some(level) = heading_level(&tag) {
-        let heading_text = collect_text(element, drop_tags, cfg.preserve_whitespace);
+        let heading_text = collect_text(element, state.drop_tags, state.cfg.preserve_whitespace);
         let trimmed = heading_text.trim();
         if !trimmed.is_empty() {
-            update_heading_stack(heading_stack, level, trimmed.to_string());
-            heading_chain_snapshot = heading_stack.iter().map(|(_, text)| text.clone()).collect();
+            update_heading_stack(state.heading_stack, level, trimmed.to_string());
+            heading_chain_snapshot = state
+                .heading_stack
+                .iter()
+                .map(|(_, text)| text.clone())
+                .collect();
             push_block(
-                blocks,
+                state.blocks,
                 trimmed.to_string(),
                 dom_path.clone(),
                 heading_chain_snapshot.clone(),
                 depth,
                 tag.clone(),
-                *position,
+                *state.position,
             );
-            *position += 1;
+            *state.position += 1;
         }
     } else if should_emit_block(&tag) {
-        let mut text = collect_text(element, drop_tags, cfg.preserve_whitespace);
+        let mut text = collect_text(element, state.drop_tags, state.cfg.preserve_whitespace);
         text = text.trim().to_string();
         if !text.is_empty() {
             if tag == "li" {
                 text = format!("- {}", text);
             }
             push_block(
-                blocks,
+                state.blocks,
                 text,
                 dom_path.clone(),
                 heading_chain_snapshot.clone(),
                 depth,
                 tag.clone(),
-                *position,
+                *state.position,
             );
-            *position += 1;
+            *state.position += 1;
         }
     }
 
@@ -147,16 +156,7 @@ fn traverse_element(
         if let Some(child_element) = ElementRef::wrap(child) {
             let child_tag = child_element.value().name().to_ascii_lowercase();
             path_stack.push(format!("{}[{}]", child_tag, child_index));
-            traverse_element(
-                child_element,
-                path_stack,
-                depth + 1,
-                drop_tags,
-                cfg,
-                heading_stack,
-                position,
-                blocks,
-            );
+            traverse_element(child_element, path_stack, depth + 1, state);
             path_stack.pop();
             child_index += 1;
         }
