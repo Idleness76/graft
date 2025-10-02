@@ -11,6 +11,11 @@ A Rust framework for graph-driven, concurrent agent workflows with explicit, ver
 - Rich tracing spans (`tracing`) and pretty diagnostics (`miette`)
 - Optional checkpointing via SQLite (or in-memory)
 
+## Workspace Layout
+
+- `graft/` – core runtime crate (graphs, schedulers, runners, demos).
+- `rag_utils/` – semantic chunking + RAG helpers reused by demos and examples.
+
 ## Repo layout (key modules)
 
 - `src/app.rs` – Orchestrates barriers and reducers; `App::invoke` runs to completion
@@ -99,3 +104,17 @@ Contributions are welcome! See `doc/` for design notes and plans. PRs with tests
 ## License
 
 MIT
+
+## Rag Utils Examples
+
+Run the standalone ingestion sample that uses mock embeddings + SQLite vector store:
+
+```bash
+cargo run -p rag_utils --example rust_book_pipeline
+```
+
+Query the chunk database produced by the ingestion run:
+
+```bash
+cargo run -p rag_utils --example query_chunks
+```

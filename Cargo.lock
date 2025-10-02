@@ -1366,28 +1366,23 @@ dependencies = [
  "miette",
  "once_cell",
  "proptest",
+ "rag_utils",
  "rand 0.9.2",
  "regex",
  "reqwest",
  "rig-core",
- "rig-sqlite",
- "rust-bert",
  "rustc-hash 2.1.1",
  "scraper",
- "segtok",
  "serde",
  "serde_json",
- "sqlite-vec",
  "sqlx",
  "tempfile",
  "thiserror 2.0.17",
- "tiktoken-rs",
  "tokio",
  "tokio-rusqlite",
  "tracing",
  "tracing-error",
  "tracing-subscriber",
- "unicode-segmentation",
  "url",
  "uuid",
 ]
@@ -2830,6 +2825,35 @@ name = "r-efi"
 version = "5.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
+
+[[package]]
+name = "rag_utils"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "httpmock",
+ "once_cell",
+ "regex",
+ "reqwest",
+ "rig-core",
+ "rig-sqlite",
+ "rust-bert",
+ "scraper",
+ "segtok",
+ "serde",
+ "serde_json",
+ "sqlite-vec",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tiktoken-rs",
+ "tokio",
+ "tokio-rusqlite",
+ "tracing",
+ "tracing-subscriber",
+ "unicode-segmentation",
+ "url",
+ "uuid",
+]
 
 [[package]]
 name = "rand"

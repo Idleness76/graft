@@ -1,13 +1,14 @@
-use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
-
 use async_trait::async_trait;
 use serde_json::Value;
+use std::collections::HashSet;
 use tracing::Instrument;
 
-use super::assembly::{average_embedding, compute_stats, link_neighbors, plan_ranges};
+use super::assembly::{
+    average_embedding, compute_stats, json_top_level_component, link_neighbors, plan_ranges,
+    structural_distance,
+};
 use super::breakpoints::detect_breakpoints;
-use super::cache::EmbeddingCache;
+use super::cache::CacheHandle;
 use super::config::{ChunkingConfig, JsonPreprocessConfig};
 use super::embeddings::SharedEmbeddingProvider;
 use super::segmenter;
@@ -24,7 +25,7 @@ const SEGMENT_TARGET_TOKENS: usize = 160;
 pub struct JsonSemanticChunker {
     embedder: SharedEmbeddingProvider,
     preprocess: JsonPreprocessConfig,
-    cache: Arc<Mutex<Option<EmbeddingCache>>>,
+    cache: CacheHandle,
 }
 
 impl JsonSemanticChunker {
@@ -32,32 +33,26 @@ impl JsonSemanticChunker {
         Self {
             embedder,
             preprocess,
-            cache: Arc::new(Mutex::new(None)),
+            cache: CacheHandle::new(),
         }
     }
 
     pub fn with_cache_capacity(self, capacity: usize) -> Self {
-        {
-            let mut guard = self.cache.lock().expect("cache mutex poisoned");
-            *guard = Some(EmbeddingCache::new(Some(capacity)));
-        }
+        self.cache.apply_capacity(Some(capacity));
         self
     }
 
     pub fn without_cache(self) -> Self {
-        {
-            let mut guard = self.cache.lock().expect("cache mutex poisoned");
-            *guard = None;
-        }
+        self.cache.disable();
         self
     }
 
-    pub fn with_shared_cache(mut self, cache: Arc<Mutex<Option<EmbeddingCache>>>) -> Self {
+    pub fn with_cache_handle(mut self, cache: CacheHandle) -> Self {
         self.cache = cache;
         self
     }
 
-    pub fn cache_handle(&self) -> Arc<Mutex<Option<EmbeddingCache>>> {
+    pub fn cache_handle(&self) -> CacheHandle {
         self.cache.clone()
     }
 
@@ -70,24 +65,7 @@ impl JsonSemanticChunker {
     }
 
     fn configure_cache(&self, cfg: &ChunkingConfig) {
-        let mut guard = self.cache.lock().expect("cache mutex poisoned");
-        match cfg.cache_capacity {
-            Some(capacity) if capacity > 0 => {
-                let replace = match guard.as_ref() {
-                    Some(existing) => existing.capacity() != Some(capacity),
-                    None => true,
-                };
-                if replace {
-                    *guard = Some(EmbeddingCache::new(Some(capacity)));
-                }
-            }
-            Some(_) => {
-                if guard.is_some() {
-                    *guard = None;
-                }
-            }
-            None => {}
-        }
+        self.cache.apply_capacity(cfg.cache_capacity);
     }
 
     fn enforce_depth(&self, value: &Value, depth: usize) -> Result<(), ChunkingError> {
@@ -336,34 +314,16 @@ impl JsonSemanticChunker {
         if segments.len() < 2 {
             return Vec::new();
         }
-        let mut scores = Vec::with_capacity(segments.len() - 1);
-        for window in segments.windows(2) {
-            let (prev, next) = (&window[0], &window[1]);
-            let path_score = top_level_component(prev.metadata.source_path.as_deref())
-                .zip(top_level_component(next.metadata.source_path.as_deref()))
-                .map(|(a, b)| if a != b { 1.0 } else { 0.0 })
-                .unwrap_or(0.0);
-            let depth_score = if prev.metadata.depth != next.metadata.depth {
-                0.5
-            } else {
-                0.0
-            };
-            let kind_score = if prev.metadata.kind != next.metadata.kind {
-                0.25
-            } else {
-                0.0
-            };
-            let mut score = path_score + depth_score + kind_score;
-            if score > 1.0 {
-                score = 1.0;
-            }
-            if score < 0.0 {
-                score = 0.0;
-            }
-            scores.push(score);
-        }
-        scores
+        segments
+            .windows(2)
+            .map(|window| {
+                structural_distance(&window[0].metadata, &window[1].metadata, |lhs, rhs| {
+                    json_top_level_component(lhs) != json_top_level_component(rhs)
+                })
+            })
+            .collect()
     }
+
     fn push_segment(
         &self,
         text: String,
@@ -448,7 +408,7 @@ impl JsonSemanticChunker {
 
         let cache_handle = self.cache.clone();
         let use_cache = {
-            let guard = cache_handle.lock().expect("cache mutex poisoned");
+            let guard = cache_handle.lock();
             guard.is_some()
         };
 
@@ -456,7 +416,7 @@ impl JsonSemanticChunker {
             let mut cached: Vec<Option<Vec<f32>>> = vec![None; texts.len()];
             let mut missing: Vec<(usize, String)> = Vec::new();
             {
-                let mut guard = cache_handle.lock().expect("cache mutex poisoned");
+                let mut guard = cache_handle.lock();
                 let cache = guard.as_mut().expect("cache absent despite flag");
                 for (idx, text) in texts.iter().enumerate() {
                     if let Some(vector) = cache.get(text) {
@@ -495,7 +455,7 @@ impl JsonSemanticChunker {
                 }
 
                 {
-                    let mut guard = cache_handle.lock().expect("cache mutex poisoned");
+                    let mut guard = cache_handle.lock();
                     let cache = guard.as_mut().expect("cache absent during update");
                     for ((idx, _), embedding) in missing.into_iter().zip(embeddings.into_iter()) {
                         cache.insert(&texts[idx], embedding.clone());
@@ -723,9 +683,4 @@ let (ranges, trace) = plan_ranges(
         .instrument(span)
         .await
     }
-}
-
-fn top_level_component(path: Option<&str>) -> Option<&str> {
-    let path = path?;
-    path.split('/').filter(|part| !part.is_empty()).next()
 }

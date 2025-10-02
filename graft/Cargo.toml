@@ -1,0 +1,101 @@
+[package]
+name = "graft"
+version = "0.1.0"
+edition = "2021"
+description = "Graph-driven, concurrent agent workflow framework with versioned state, deterministic barrier merges, and rich diagnostics."
+license = "MIT"
+repository = "https://github.com/Idleness76/graft"
+readme = "README.md"
+keywords = ["graph","workflow","concurrency","agents","tracing"]
+categories = ["concurrency","data-structures","algorithms"]
+rust-version = "1.83"
+homepage = "https://github.com/Idleness76/graft"
+documentation = "https://docs.rs/graft"
+
+[dev-dependencies]
+proptest = "1"
+tempfile = "3"
+httpmock = "0.7"
+
+[dependencies]
+rag_utils = { path = "../rag_utils" }
+# Error handling & diagnostics
+miette = { version = "7.6", features = ["fancy"] }
+thiserror = "2"
+
+# Tracing & logging  
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "ansi"] }
+tracing-error = "0.2"
+
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs"] }
+async-trait = "0.1"
+futures-util = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Data structures & utilities
+rustc-hash = "2.1"
+flume = "0.11"
+once_cell = "1.19"
+
+# Time & IDs
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+rand = "0.9"
+
+# HTTP client
+reqwest = { version = "0.12", default-features = false, features = ["json", "gzip", "brotli", "rustls-tls"] }
+url = "2"
+
+# LLM framework (external dependency)
+rig-core = { version = "0.21", features = ["derive"] }
+
+# Vector store integration
+tokio-rusqlite = { version = "0.6", features = ["bundled"] }
+
+# Database
+sqlx = { version = "0.8", features = [
+    "runtime-tokio-rustls",
+    "sqlite", 
+    "macros",
+    "uuid",
+    "chrono",
+    "json"
+] }
+
+# Configuration
+dotenvy = "0.15"
+regex = "1"
+
+scraper = "0.24"
+
+# Token accounting (feature-gated)
+
+# NLP helpers (feature-gated, heavy)
+
+# Optional future section:
+# [package.metadata.docs.rs]
+# all-features = true
+# rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = ["sqlite-migrations", "semantic-chunking-tiktoken"]
+sqlite-migrations = []
+semantic-chunking-tiktoken = ["rag_utils/semantic-chunking-tiktoken"]
+semantic-chunking-rust-bert = ["rag_utils/semantic-chunking-rust-bert"]
+semantic-chunking-segtok = ["rag_utils/semantic-chunking-segtok"]
+
+# Clippy configuration to enforce Message API best practices
+[lints.clippy]
+# Encourage use of convenience constructors over manual struct construction
+manual_string_new = "warn"
+# Encourage use of builder patterns and convenience methods
+new_without_default = "warn"
+# General code quality
+missing_errors_doc = "allow" # We handle this manually
+module_name_repetitions = "allow" # Common in this domain
+too_many_lines = "allow" # Documentation examples can be long

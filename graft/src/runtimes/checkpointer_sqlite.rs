@@ -8,7 +8,7 @@ Behavior:
 - Uses serde-based persistence models (see `runtimes::persistence`) for
   encoding `VersionedState`, frontier node kinds, and `versions_seen`.
 - When the `sqlite-migrations` feature is enabled (default), embedded
-  migrations (`sqlx::migrate!("./migrations")`) are executed on connect;
+  migrations (`sqlx::migrate!("../migrations")`) are executed on connect;
   disabling the feature assumes external migration orchestration.
 
 Design goals:
@@ -146,7 +146,7 @@ impl SQLiteCheckpointer {
         // Run embedded migrations only if the feature is enabled (idempotent).
         #[cfg(feature = "sqlite-migrations")]
         {
-            if let Err(e) = sqlx::migrate!("./migrations").run(&pool).await {
+            if let Err(e) = sqlx::migrate!("../migrations").run(&pool).await {
                 return Err(CheckpointerError::Backend(format!(
                     "migration failure: {e}"
                 )));

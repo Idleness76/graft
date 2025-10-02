@@ -22,17 +22,18 @@ use tokio::time::sleep;
 use tokio_rusqlite::Connection;
 use url::Url;
 
+#[cfg(test)]
 use crate::event_bus::EventBus;
 use crate::graph::GraphBuilder;
 use crate::message::Message;
 use crate::node::{Node, NodeContext, NodeError, NodePartial};
-use crate::rag::store::sqlite::{ChunkDocument, SqliteChunkStore};
 use crate::runtimes::{CheckpointerType, RuntimeConfig};
-use crate::semantic_chunking::service::{ChunkDocumentRequest, ChunkSource};
-use crate::semantic_chunking::SemanticChunkingService;
 use crate::state::VersionedState;
 use crate::types::NodeKind;
 use crate::utils::collections::new_extra_map;
+use rag_utils::semantic_chunking::service::{ChunkDocumentRequest, ChunkSource};
+use rag_utils::semantic_chunking::SemanticChunkingService;
+use rag_utils::stores::sqlite::{ChunkDocument, SqliteChunkStore};
 
 mod scraping_helpers {
     use url::Url;
@@ -246,13 +247,8 @@ pub async fn run_demo5() -> Result<()> {
     }
     let embedding_model = ollama_client.embedding_model_with_ndims("nomic-embed-text", ndims);
 
-    let event_bus = EventBus::default();
-    event_bus.listen_for_events();
-    let bus_sender = event_bus.get_sender();
-
     let service = Arc::new(
         SemanticChunkingService::builder()
-            .with_event_sender(bus_sender)
             .with_rig_model(embedding_model.clone())
             .build(),
     );
@@ -544,6 +540,21 @@ impl Node for ChunkNode {
                     provider: "SemanticChunkingService",
                     message: err.to_string(),
                 })?;
+
+            let telemetry = &response.telemetry;
+            ctx.emit(
+                "chunk",
+                format!(
+                    "telemetry source={} chunks={} avg_tokens={:.2} fallback={} cache_hits={} cache_misses={} strategy={}",
+                    telemetry.source,
+                    telemetry.chunk_count,
+                    telemetry.average_tokens,
+                    telemetry.fallback_used,
+                    telemetry.cache_hits,
+                    telemetry.cache_misses,
+                    telemetry.strategy,
+                ),
+            )?;
 
             for (idx, chunk) in response.outcome.chunks.iter().enumerate() {
                 let Some(embedding) = chunk.embedding.clone() else {

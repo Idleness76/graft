@@ -1,16 +1,13 @@
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 
-use flume::Sender;
 use rig::embeddings::{embedding::EmbeddingModelDyn, EmbeddingModel};
 use serde_json::Value;
 use tokio::fs;
 use tracing::{field, info_span};
 
-use crate::event_bus::Event;
-
-use super::cache::{CacheMetrics, EmbeddingCache};
+use super::cache::{CacheHandle, CacheMetrics};
 use super::config::{
     BreakpointStrategy, ChunkingConfig, HtmlPreprocessConfig, JsonPreprocessConfig,
     SemanticChunkingModuleConfig,
@@ -24,10 +21,9 @@ use super::SemanticChunker;
 pub struct SemanticChunkingService {
     defaults: SemanticChunkingModuleConfig,
     base_embedder: Option<EmbedderKind>,
-    event_sender: Option<Sender<Event>>,
     null_provider: SharedEmbeddingProvider,
-    json_cache: Arc<Mutex<Option<EmbeddingCache>>>,
-    html_cache: Arc<Mutex<Option<EmbeddingCache>>>,
+    json_cache: CacheHandle,
+    html_cache: CacheHandle,
 }
 
 impl SemanticChunkingService {
@@ -78,21 +74,21 @@ impl SemanticChunkingService {
         let (outcome, cache_hits, cache_misses) = match kind {
             DocumentKind::Json(value) => {
                 let cache_handle = self.json_cache.clone();
-                let before = Self::cache_snapshot(&cache_handle);
+                let before = cache_handle.metrics();
                 let chunker = JsonSemanticChunker::new(provider.shared.clone(), json_cfg)
-                    .with_shared_cache(cache_handle.clone());
+                    .with_cache_handle(cache_handle.clone());
                 let outcome = chunker.chunk(value, &chunk_cfg).await?;
-                let after = Self::cache_snapshot(&cache_handle);
+                let after = cache_handle.metrics();
                 let diff = Self::metrics_diff(before, after);
                 (outcome, diff.0, diff.1)
             }
             DocumentKind::Html(html) => {
                 let cache_handle = self.html_cache.clone();
-                let before = Self::cache_snapshot(&cache_handle);
+                let before = cache_handle.metrics();
                 let chunker = HtmlSemanticChunker::new(provider.shared.clone(), html_cfg)
-                    .with_shared_cache(cache_handle.clone());
+                    .with_cache_handle(cache_handle.clone());
                 let outcome = chunker.chunk(html, &chunk_cfg).await?;
-                let after = Self::cache_snapshot(&cache_handle);
+                let after = cache_handle.metrics();
                 let diff = Self::metrics_diff(before, after);
                 (outcome, diff.0, diff.1)
             }
@@ -110,37 +106,16 @@ impl SemanticChunkingService {
             .clone()
             .unwrap_or_else(|| provider.shared.identify().to_string());
 
-        span.record("embedder", &field::display(&embedder_label));
-        span.record("fallback", &field::display(fallback_used));
-        span.record("cache_hits", &field::display(cache_hits));
-        span.record("cache_misses", &field::display(cache_misses));
-        span.record("duration_ms", &field::display(duration_ms));
-        span.record("chunks", &field::display(outcome.chunks.len()));
+        span.record("embedder", field::display(&embedder_label));
+        span.record("fallback", field::display(fallback_used));
+        span.record("cache_hits", field::display(cache_hits));
+        span.record("cache_misses", field::display(cache_misses));
+        span.record("duration_ms", field::display(duration_ms));
+        span.record("chunks", field::display(outcome.chunks.len()));
         span.record(
             "strategy",
-            &field::display(strategy_label(&chunk_cfg.strategy)),
+            field::display(strategy_label(&chunk_cfg.strategy)),
         );
-
-        if let Some(sender) = &self.event_sender {
-            let source_label_for_event = source_label.clone();
-            let sender_clone = sender.clone();
-            let _ = sender_clone.send(Event::diagnostic(
-                "semantic_chunking",
-                format!(
-                    "source={source} embedder={embedder} chunks={chunks} avg_tokens={avg:.2} fallback={fallback} cache_hits={hits} cache_misses={misses} smoothing={smoothing:?}",
-                    source = source_label_for_event,
-                    embedder = embedder_label,
-                    chunks = outcome.chunks.len(),
-                    avg = outcome.stats.average_tokens,
-                    fallback = fallback_used,
-                    hits = cache_hits,
-                    misses = cache_misses,
-                    smoothing = chunk_cfg.score_smoothing_window,
-                ),
-            ));
-
-            self.emit_chunk_details(sender_clone, &source_label, &outcome);
-        }
 
         let telemetry = ChunkTelemetry {
             embedder: embedder_label,
@@ -236,11 +211,6 @@ impl SemanticChunkingService {
         }
     }
 
-    fn cache_snapshot(handle: &Arc<Mutex<Option<EmbeddingCache>>>) -> Option<CacheMetrics> {
-        let guard = handle.lock().ok()?;
-        guard.as_ref().map(|cache| cache.metrics())
-    }
-
     fn metrics_diff(before: Option<CacheMetrics>, after: Option<CacheMetrics>) -> (usize, usize) {
         match (before, after) {
             (Some(prev), Some(next)) => (
@@ -270,7 +240,6 @@ pub enum EmbedderKind {
 
 pub struct SemanticChunkingServiceBuilder {
     defaults: SemanticChunkingModuleConfig,
-    event_sender: Option<Sender<Event>>,
     embedder: Option<EmbedderKind>,
 }
 
@@ -278,18 +247,12 @@ impl SemanticChunkingServiceBuilder {
     fn new() -> Self {
         Self {
             defaults: SemanticChunkingModuleConfig::default(),
-            event_sender: None,
             embedder: None,
         }
     }
 
     pub fn with_module_config(mut self, config: SemanticChunkingModuleConfig) -> Self {
         self.defaults = config;
-        self
-    }
-
-    pub fn with_event_sender(mut self, sender: Sender<Event>) -> Self {
-        self.event_sender = Some(sender);
         self
     }
 
@@ -317,15 +280,26 @@ impl SemanticChunkingServiceBuilder {
         self
     }
 
+    pub fn with_cache_capacity(mut self, capacity: usize) -> Self {
+        self.defaults.chunking.cache_capacity = Some(capacity);
+        self
+    }
+
+    pub fn without_cache(mut self) -> Self {
+        self.defaults.chunking.cache_capacity = Some(0);
+        self
+    }
+
     pub fn build(self) -> SemanticChunkingService {
-        let null_provider: SharedEmbeddingProvider = Arc::new(NullEmbeddingProvider::default());
+        let null_provider: SharedEmbeddingProvider = Arc::new(NullEmbeddingProvider);
+        let json_cache = CacheHandle::from_capacity(self.defaults.chunking.cache_capacity);
+        let html_cache = CacheHandle::from_capacity(self.defaults.chunking.cache_capacity);
         SemanticChunkingService {
             defaults: self.defaults,
             base_embedder: self.embedder,
-            event_sender: self.event_sender,
             null_provider,
-            json_cache: Arc::new(Mutex::new(None)),
-            html_cache: Arc::new(Mutex::new(None)),
+            json_cache,
+            html_cache,
         }
     }
 }
@@ -367,10 +341,7 @@ impl ChunkDocumentRequest {
     where
         F: FnOnce(&mut ChunkingConfig),
     {
-        let mut cfg = self
-            .chunking_config
-            .take()
-            .unwrap_or_else(ChunkingConfig::default);
+        let mut cfg = self.chunking_config.take().unwrap_or_default();
         f(&mut cfg);
         self.chunking_config = Some(cfg);
         self
@@ -436,79 +407,7 @@ enum DocumentKind {
     Html(String),
 }
 
-impl SemanticChunkingService {
-    fn emit_chunk_details(
-        &self,
-        sender: Sender<Event>,
-        source_label: &str,
-        outcome: &ChunkingOutcome,
-    ) {
-        let mut details = String::new();
-        details.push_str(&format!(
-            "source={} chunks={} avg_tokens={:.2}",
-            source_label,
-            outcome.chunks.len(),
-            outcome.stats.average_tokens
-        ));
-        if let Some(trace) = &outcome.trace {
-            details.push_str(&format!(" trace_events={}", trace.events.len()));
-        }
-        let _ = sender.send(Event::diagnostic("semantic_chunking.detail", details));
-
-        let mut chunk_lines = Vec::new();
-        for (idx, chunk) in outcome.chunks.iter().enumerate().take(10) {
-            let label = chunk.metadata.heading_hierarchy.join(" > ");
-            let preview = chunk
-                .content
-                .chars()
-                .filter(|c| !c.is_control())
-                .take(80)
-                .collect::<String>();
-            chunk_lines.push(format!(
-                "#{} tokens={} heading={} path={:?} content_preview=\"{}\"",
-                idx,
-                chunk.tokens,
-                if label.is_empty() {
-                    "(none)"
-                } else {
-                    label.as_str()
-                },
-                chunk.metadata.source_path,
-                preview
-            ));
-        }
-        if outcome.chunks.len() > 10 {
-            chunk_lines.push(format!(
-                "(+{} more chunks omitted)",
-                outcome.chunks.len() - 10
-            ));
-        }
-        let _ = sender.send(Event::diagnostic(
-            "semantic_chunking.chunks",
-            chunk_lines.join("\n"),
-        ));
-
-        if let Some(trace) = &outcome.trace {
-            let mut trace_lines = Vec::new();
-            for event in trace.events.iter().take(10) {
-                trace_lines.push(format!(
-                    "label={} idx={:?} score={:?}",
-                    event.label, event.index, event.score
-                ));
-            }
-            if trace.events.len() > 10 {
-                trace_lines.push(format!(
-                    "(+{} more trace events omitted)",
-                    trace.events.len() - 10
-                ));
-            }
-            let _ = sender.send(Event::diagnostic(
-                "semantic_chunking.trace",
-                trace_lines.join("\n"),
-            ));
-        }
-    }
-}
+impl SemanticChunkingService {}
 
 #[cfg(test)]
 mod tests {
@@ -602,30 +501,5 @@ mod tests {
 
         assert!(response.telemetry.source.starts_with("json:file"));
         assert!(!response.outcome.chunks.is_empty());
-    }
-
-    #[tokio::test]
-    async fn emits_diagnostic_event() {
-        let (tx, rx) = flume::unbounded();
-        let service = SemanticChunkingService::builder()
-            .with_event_sender(tx)
-            .build();
-
-        let value = json!({
-            "alpha": "Event emission test",
-            "beta": "Ensures telemetry path fires"
-        });
-        let request = ChunkDocumentRequest::new(ChunkSource::Json(value));
-        let response = service.chunk_document(request).await.unwrap();
-        assert!(!response.outcome.chunks.is_empty());
-
-        let event = rx.recv_async().await.unwrap();
-        match event {
-            Event::Diagnostic(diag) => {
-                assert_eq!(diag.scope(), "semantic_chunking");
-                assert!(diag.message().contains("chunks="));
-            }
-            other => panic!("unexpected event: {:?}", other),
-        }
     }
 }

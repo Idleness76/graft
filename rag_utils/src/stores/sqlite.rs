@@ -11,7 +11,7 @@ use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 use tokio_rusqlite::{ffi, Connection};
 
-use crate::rag::types::RagError;
+use crate::types::RagError;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChunkDocument {

@@ -1,7 +1,7 @@
 use crate::semantic_chunking::config::ChunkingConfig;
 use crate::semantic_chunking::tokenizer;
 use crate::semantic_chunking::types::{
-    CandidateSegment, ChunkingStats, ChunkingTrace, SemanticChunk, TraceEvent,
+    CandidateSegment, ChunkingStats, ChunkingTrace, SegmentMetadata, SemanticChunk, TraceEvent,
 };
 
 /// Prepare chunk ranges and trace data based on breakpoint detection results.
@@ -75,8 +75,9 @@ pub fn plan_ranges(
     for range in adjusted.into_iter() {
         let mut cursor = range.0;
         let mut acc = 0usize;
-        for idx in range.0..range.1 {
-            let segment_tokens = segments[idx].tokens;
+        for (offset, segment) in segments[range.0..range.1].iter().enumerate() {
+            let idx = range.0 + offset;
+            let segment_tokens = segment.tokens;
             if acc > 0 && acc + segment_tokens > max_tokens && cursor < idx {
                 bounded.push((cursor, idx));
                 max_split_indices.push(idx);
@@ -87,9 +88,10 @@ pub fn plan_ranges(
             acc += segment_tokens;
 
             if acc >= max_tokens {
-                bounded.push((cursor, idx + 1));
-                max_split_indices.push(idx + 1);
-                cursor = idx + 1;
+                let split = idx + 1;
+                bounded.push((cursor, split));
+                max_split_indices.push(split);
+                cursor = split;
                 acc = 0;
             }
         }
@@ -164,7 +166,6 @@ pub fn compute_stats(chunks: &[SemanticChunk], total_segments: usize) -> Chunkin
 }
 
 /// Sum tokenizer counts across a slice of segments.
-
 pub fn smooth_scores(scores: &[f32], window: Option<usize>) -> Vec<f32> {
     let w = window.unwrap_or(1).max(1);
     if w <= 1 || scores.is_empty() {
@@ -200,6 +201,54 @@ pub fn combine_text_with_tokens(parts: &[&str]) -> (String, usize) {
     }
     let tokens = tokenizer::count(&text);
     (text, tokens)
+}
+
+/// Compute structural break contribution for adjacent segments based on path/depth/kind differences.
+pub fn structural_distance<F>(
+    prev: &SegmentMetadata,
+    next: &SegmentMetadata,
+    mut path_differs: F,
+) -> f32
+where
+    F: FnMut(Option<&str>, Option<&str>) -> bool,
+{
+    let mut score: f32 = 0.0;
+    if path_differs(prev.source_path.as_deref(), next.source_path.as_deref()) {
+        score += 1.0_f32;
+    }
+    if prev.depth != next.depth {
+        score += 0.5_f32;
+    }
+    if prev.kind != next.kind {
+        score += 0.25_f32;
+    }
+    score.clamp(0.0, 1.0)
+}
+
+/// Extract the top-level JSON path component used for structural comparisons.
+pub fn json_top_level_component(path: Option<&str>) -> Option<&str> {
+    let path = path?;
+    path.split('/').find(|part| !part.is_empty())
+}
+
+/// Extract the top-level HTML path component used for structural comparisons.
+pub fn html_top_level_component(path: Option<&str>) -> Option<&str> {
+    let path = path?;
+    let segment = path.split('>').next()?.trim();
+    if segment.is_empty() {
+        return None;
+    }
+    segment
+        .split('/')
+        .find_map(|part| {
+            let trimmed = part.trim();
+            (!trimmed.is_empty()).then_some(trimmed)
+        })
+        .or_else(|| {
+            segment
+                .split_whitespace()
+                .find(|component| !component.is_empty())
+        })
 }
 
 /// Average a slice of embedding vectors, returning None on mismatch.

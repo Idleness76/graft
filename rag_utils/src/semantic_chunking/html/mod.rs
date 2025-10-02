@@ -1,8 +1,6 @@
 pub mod grouper;
 pub mod preprocess;
 
-use std::sync::{Arc, Mutex};
-
 use async_trait::async_trait;
 use serde_json::json;
 use tracing::Instrument;
@@ -11,10 +9,11 @@ use grouper::{group_blocks, HtmlBlock};
 use preprocess::sanitize_html;
 
 use crate::semantic_chunking::assembly::{
-    average_embedding, compute_stats, link_neighbors, plan_ranges,
+    average_embedding, compute_stats, html_top_level_component, link_neighbors, plan_ranges,
+    structural_distance,
 };
 use crate::semantic_chunking::breakpoints::detect_breakpoints;
-use crate::semantic_chunking::cache::EmbeddingCache;
+use crate::semantic_chunking::cache::CacheHandle;
 use crate::semantic_chunking::config::{ChunkingConfig, HtmlPreprocessConfig};
 use crate::semantic_chunking::embeddings::SharedEmbeddingProvider;
 use crate::semantic_chunking::segmenter;
@@ -29,7 +28,7 @@ use crate::semantic_chunking::SemanticChunker;
 pub struct HtmlSemanticChunker {
     embedder: SharedEmbeddingProvider,
     preprocess: HtmlPreprocessConfig,
-    cache: Arc<Mutex<Option<EmbeddingCache>>>,
+    cache: CacheHandle,
 }
 
 impl HtmlSemanticChunker {
@@ -37,15 +36,12 @@ impl HtmlSemanticChunker {
         Self {
             embedder,
             preprocess,
-            cache: Arc::new(Mutex::new(None)),
+            cache: CacheHandle::new(),
         }
     }
 
     pub fn with_cache_capacity(self, capacity: usize) -> Self {
-        {
-            let mut guard = self.cache.lock().expect("cache mutex poisoned");
-            *guard = Some(EmbeddingCache::new(Some(capacity)));
-        }
+        self.cache.apply_capacity(Some(capacity));
         self
     }
 
@@ -58,28 +54,15 @@ impl HtmlSemanticChunker {
     }
 
     fn configure_cache(&self, cfg: &ChunkingConfig) {
-        if let Some(capacity) = cfg.cache_capacity {
-            let mut guard = self.cache.lock().expect("cache mutex poisoned");
-            if capacity == 0 {
-                *guard = None;
-            } else {
-                let replace = match guard.as_ref() {
-                    Some(existing) => existing.capacity() != Some(capacity),
-                    None => true,
-                };
-                if replace {
-                    *guard = Some(EmbeddingCache::new(Some(capacity)));
-                }
-            }
-        }
+        self.cache.apply_capacity(cfg.cache_capacity);
     }
 
-    pub fn with_shared_cache(mut self, cache: Arc<Mutex<Option<EmbeddingCache>>>) -> Self {
+    pub fn with_cache_handle(mut self, cache: CacheHandle) -> Self {
         self.cache = cache;
         self
     }
 
-    pub fn cache_handle(&self) -> Arc<Mutex<Option<EmbeddingCache>>> {
+    pub fn cache_handle(&self) -> CacheHandle {
         self.cache.clone()
     }
 
@@ -87,42 +70,26 @@ impl HtmlSemanticChunker {
         if segments.len() < 2 {
             return Vec::new();
         }
-        let mut scores = Vec::with_capacity(segments.len() - 1);
-        for window in segments.windows(2) {
-            let (prev, next) = (&window[0], &window[1]);
-            let path_score = top_level_component(prev.metadata.source_path.as_deref())
-                .zip(top_level_component(next.metadata.source_path.as_deref()))
-                .map(|(a, b)| if a != b { 1.0 } else { 0.0 })
-                .unwrap_or(0.0);
-            let depth_score = if prev.metadata.depth != next.metadata.depth {
-                0.5
-            } else {
-                0.0
-            };
-            let kind_score = if prev.metadata.kind != next.metadata.kind {
-                0.25
-            } else {
-                0.0
-            };
-            let heading_score = prev
-                .metadata
-                .extra
-                .get("heading_chain")
-                .zip(next.metadata.extra.get("heading_chain"))
-                .and_then(|(a, b)| a.as_array().zip(b.as_array()))
-                .map(|(a, b)| if a != b { 0.5 } else { 0.0 })
-                .unwrap_or(0.0);
-            let mut score = path_score + depth_score + kind_score + heading_score;
-            if score > 1.0 {
-                score = 1.0;
-            }
-            if score < 0.0 {
-                score = 0.0;
-            }
-            scores.push(score);
-        }
-        scores
+        segments
+            .windows(2)
+            .map(|window| {
+                let base =
+                    structural_distance(&window[0].metadata, &window[1].metadata, |lhs, rhs| {
+                        html_top_level_component(lhs) != html_top_level_component(rhs)
+                    });
+                let heading_bonus = window[0]
+                    .metadata
+                    .extra
+                    .get("heading_chain")
+                    .zip(window[1].metadata.extra.get("heading_chain"))
+                    .and_then(|(a, b)| a.as_array().zip(b.as_array()))
+                    .map(|(a, b)| if a != b { 0.5_f32 } else { 0.0_f32 })
+                    .unwrap_or(0.0_f32);
+                (base + heading_bonus).clamp(0.0, 1.0)
+            })
+            .collect()
     }
+
     async fn embed_segments(
         &self,
         texts: &[String],
@@ -133,16 +100,13 @@ impl HtmlSemanticChunker {
         }
 
         let cache_handle = self.cache.clone();
-        let use_cache = {
-            let guard = cache_handle.lock().expect("cache mutex poisoned");
-            guard.is_some()
-        };
+        let use_cache = cache_handle.capacity().is_some();
 
         if use_cache {
             let mut cached: Vec<Option<Vec<f32>>> = vec![None; texts.len()];
             let mut missing: Vec<(usize, String)> = Vec::new();
             {
-                let mut guard = cache_handle.lock().expect("cache mutex poisoned");
+                let mut guard = cache_handle.lock();
                 let cache = guard.as_mut().expect("cache absent despite flag");
                 for (idx, text) in texts.iter().enumerate() {
                     if let Some(vector) = cache.get(text) {
@@ -181,7 +145,7 @@ impl HtmlSemanticChunker {
                 }
 
                 {
-                    let mut guard = cache_handle.lock().expect("cache mutex poisoned");
+                    let mut guard = cache_handle.lock();
                     let cache = guard.as_mut().expect("cache absent during update");
                     for ((idx, _), embedding) in missing.into_iter().zip(embeddings.into_iter()) {
                         cache.insert(&texts[idx], embedding.clone());
@@ -466,21 +430,6 @@ impl HeadingMetadataExt for SegmentMetadata {
             .get("heading_chain")
             .and_then(|value| serde_json::from_value(value.clone()).ok())
     }
-}
-
-fn top_level_component(path: Option<&str>) -> Option<&str> {
-    let path = path?;
-    path.split('>')
-        .next()
-        .map(|segment| segment.trim())
-        .and_then(|segment| {
-            let slash_split: Vec<&str> = segment.split('/').filter(|s| !s.is_empty()).collect();
-            if !slash_split.is_empty() {
-                Some(slash_split[0])
-            } else {
-                segment.split(' ').next()
-            }
-        })
 }
 
 fn split_block_text(block: &HtmlBlock, cfg: &ChunkingConfig) -> Vec<(String, usize)> {

@@ -9,10 +9,10 @@ use tokio::fs;
 use tokio::sync::Mutex;
 use tracing::{debug, info};
 
-use crate::rag::store::sqlite::{ChunkDocument, SqliteChunkStore};
-use crate::rag::types::RagError;
 use crate::semantic_chunking::service::{ChunkDocumentRequest, ChunkDocumentResponse, ChunkSource};
 use crate::semantic_chunking::{ChunkTelemetry, SemanticChunkingService};
+use crate::stores::sqlite::{ChunkDocument, SqliteChunkStore};
+use crate::types::RagError;
 
 #[derive(Clone)]
 pub struct RustBookIngestOptions {

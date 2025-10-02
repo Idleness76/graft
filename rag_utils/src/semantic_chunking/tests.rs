@@ -126,7 +126,7 @@ async fn html_chunker_breakpoints_stable() {
         signatures,
         vec![
             "Semantic Chunking 101 Semantic chunking divides documents into meaningful passages that can be embedded effectively. Why It Matters Embedding models work best when each chunk contains a single, cohesive idea. Improves retrieval accuracy Reduces hallucination risk Implementation Tips Combine embeddings with lexical heuristics to place breakpoints. Preserve structural metadata like headings and DOM paths.".to_string(),
-            "Semantic Chunking 101".to_string(),
+            "Why It Matters".to_string(),
         ]
     );
 }
