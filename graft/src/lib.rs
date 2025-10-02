@@ -1,6 +1,6 @@
-//! # Graft: Graph-driven Agent Workflow Framework
+//! # Weavegraph: Graph-driven Agent Workflow Framework
 //!
-//! Graft is a framework for building concurrent, stateful workflows using graph-based
+//! Weavegraph is a framework for building concurrent, stateful workflows using graph-based
 //! execution with versioned state management and deterministic barrier merges.
 //!
 //! ## Core Concepts
@@ -18,7 +18,7 @@
 //! Messages are the primary communication primitive. Use convenience constructors:
 //!
 //! ```
-//! use graft::message::{Message, roles};
+//! use weavegraph::message::{Message, roles};
 //!
 //! // Preferred: Use convenience constructors
 //! let user_msg = Message::user("What's the weather like?");
@@ -43,7 +43,7 @@
 //! ### Building a Simple Workflow
 //!
 //! ```
-//! use graft::{
+//! use weavegraph::{
 //!     graph::GraphBuilder,
 //!     node::{Node, NodeContext, NodePartial},
 //!     message::Message,
@@ -59,9 +59,9 @@
 //! impl Node for GreetingNode {
 //!     async fn run(
 //!         &self,
-//!         snapshot: graft::state::StateSnapshot,
+//!         snapshot: weavegraph::state::StateSnapshot,
 //!         _ctx: NodeContext,
-//!     ) -> Result<NodePartial, graft::node::NodeError> {
+//!     ) -> Result<NodePartial, weavegraph::node::NodeError> {
 //!         // Use convenience constructor instead of verbose struct syntax
 //!         let greeting = Message::assistant("Hello! How can I help you today?");
 //!         
@@ -77,8 +77,8 @@
 //! ### State Management
 //!
 //! ```
-//! use graft::state::VersionedState;
-//! use graft::message::Message;
+//! use weavegraph::state::VersionedState;
+//! use weavegraph::message::Message;
 //!
 //! // Create initial state with user message
 //! let state = VersionedState::new_with_user_message("Hello, system!");
@@ -96,7 +96,7 @@
 //! ### Message Construction
 //!
 //! ```
-//! use graft::message::{Message, roles};
+//! use weavegraph::message::{Message, roles};
 //!
 //! // ✅ GOOD: Use convenience constructors
 //! let user_msg = Message::user("Hello");
@@ -124,7 +124,7 @@
 //! The framework uses comprehensive error types with detailed context:
 //!
 //! ```
-//! use graft::node::{NodeError, NodeContext};
+//! use weavegraph::node::{NodeError, NodeContext};
 //!
 //! // Errors are automatically traced and can be emitted to the event bus
 //! fn example_error_handling(ctx: &NodeContext) -> Result<(), NodeError> {
@@ -166,7 +166,3 @@ pub mod state;
 pub mod telemetry;
 pub mod types;
 pub mod utils;
-
-#[cfg(test)]
-mod test_error_persistence;
-pub mod testing;

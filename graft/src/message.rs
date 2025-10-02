@@ -24,7 +24,7 @@ pub mod roles {
 ///
 /// ## Basic Construction
 /// ```
-/// use graft::message::{Message, roles};
+/// use weavegraph::message::{Message, roles};
 ///
 /// // Manual construction
 /// let message = Message {
@@ -40,7 +40,7 @@ pub mod roles {
 ///
 /// ## Builder Pattern
 /// ```
-/// use graft::message::Message;
+/// use weavegraph::message::Message;
 ///
 /// let message = Message::builder()
 ///     .role("user")
@@ -52,7 +52,7 @@ pub mod roles {
 ///
 /// Messages implement `Serialize` and `Deserialize` for JSON/other formats:
 /// ```
-/// use graft::message::Message;
+/// use weavegraph::message::Message;
 ///
 /// let msg = Message::user("test");
 /// let json = serde_json::to_string(&msg).unwrap();
@@ -74,7 +74,7 @@ impl Message {
     ///
     /// # Examples
     /// ```
-    /// use graft::message::{Message, roles};
+    /// use weavegraph::message::{Message, roles};
     ///
     /// let msg = Message::new(roles::USER, "Hello!");
     /// assert_eq!(msg.role, "user");
@@ -92,7 +92,7 @@ impl Message {
     ///
     /// # Examples
     /// ```
-    /// use graft::message::Message;
+    /// use weavegraph::message::Message;
     ///
     /// let msg = Message::user("What's the weather like?");
     /// assert_eq!(msg.role, "user");
@@ -107,7 +107,7 @@ impl Message {
     ///
     /// # Examples
     /// ```
-    /// use graft::message::Message;
+    /// use weavegraph::message::Message;
     ///
     /// let msg = Message::assistant("It's sunny and 75°F.");
     /// assert_eq!(msg.role, "assistant");
@@ -122,7 +122,7 @@ impl Message {
     ///
     /// # Examples
     /// ```
-    /// use graft::message::Message;
+    /// use weavegraph::message::Message;
     ///
     /// let msg = Message::system("You are a helpful AI assistant.");
     /// assert_eq!(msg.role, "system");
@@ -137,7 +137,7 @@ impl Message {
     ///
     /// # Examples
     /// ```
-    /// use graft::message::Message;
+    /// use weavegraph::message::Message;
     ///
     /// let msg = Message::builder()
     ///     .role("function")
@@ -153,7 +153,7 @@ impl Message {
     ///
     /// # Examples
     /// ```
-    /// use graft::message::Message;
+    /// use weavegraph::message::Message;
     ///
     /// let valid = Message::user("Hello");
     /// assert!(valid.is_valid());
@@ -170,7 +170,7 @@ impl Message {
     ///
     /// # Examples
     /// ```
-    /// use graft::message::{Message, roles};
+    /// use weavegraph::message::{Message, roles};
     ///
     /// let msg = Message::user("Hello");
     /// assert!(msg.has_role(roles::USER));
@@ -185,7 +185,7 @@ impl Message {
     ///
     /// # Examples
     /// ```
-    /// use graft::message::Message;
+    /// use weavegraph::message::Message;
     ///
     /// let user_msg = Message::user("Hello");
     /// let assistant_msg = Message::assistant("Hi there!");
@@ -202,7 +202,7 @@ impl Message {
     ///
     /// # Examples
     /// ```
-    /// use graft::message::Message;
+    /// use weavegraph::message::Message;
     ///
     /// let user_msg = Message::user("Hello");
     /// let assistant_msg = Message::assistant("Hi there!");
@@ -219,7 +219,7 @@ impl Message {
     ///
     /// # Examples
     /// ```
-    /// use graft::message::Message;
+    /// use weavegraph::message::Message;
     ///
     /// let system_msg = Message::system("You are helpful");
     /// let user_msg = Message::user("Hello");
@@ -240,7 +240,7 @@ impl Message {
 ///
 /// # Examples
 /// ```
-/// use graft::message::Message;
+/// use weavegraph::message::Message;
 ///
 /// let msg = Message::builder()
 ///     .role("function")
@@ -264,7 +264,7 @@ impl MessageBuilder {
     ///
     /// # Examples
     /// ```
-    /// use graft::message::{Message, roles};
+    /// use weavegraph::message::{Message, roles};
     ///
     /// let msg = Message::builder()
     ///     .role(roles::USER)
@@ -281,7 +281,7 @@ impl MessageBuilder {
     ///
     /// # Examples
     /// ```
-    /// use graft::message::Message;
+    /// use weavegraph::message::Message;
     ///
     /// let msg = Message::builder()
     ///     .role("user")
@@ -300,7 +300,7 @@ impl MessageBuilder {
     ///
     /// # Examples
     /// ```
-    /// use graft::message::Message;
+    /// use weavegraph::message::Message;
     ///
     /// let msg = Message::builder()
     ///     .role("user")

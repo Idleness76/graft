@@ -1,15 +1,14 @@
-# Graft
+# Weavegraph
 
-A Rust framework for graph-driven, concurrent agent workflows with explicit, versioned state and deterministic barrier merges. Think “LangGraph-style graphs” but strongly typed, instrumented, and designed for reliability.
+[![Crates.io](https://img.shields.io/crates/v/weavegraph.svg)](https://crates.io/crates/weavegraph)
+[![Documentation](https://docs.rs/weavegraph/badge.svg)](https://docs.rs/weavegraph)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI/CD](https://github.com/Idleness76/weavegraph/workflows/CI/CD/badge.svg)](https://github.com/Idleness76/weavegraph/actions)
+[![Security Audit](https://github.com/Idleness76/weavegraph/workflows/Security%20Audit/badge.svg)](https://github.com/Idleness76/weavegraph/actions)
 
-## Highlights
+**Graph-driven, concurrent agent workflow framework with versioned state, deterministic barrier merges, and rich diagnostics.**
 
-- Versioned, channelized state: `messages`, `extra`, and a persisted `errors` channel
-- Deterministic barrier merges via a pluggable reducer registry
-- Bounded-concurrency scheduler with version gating (superstep barrier model)
-- Strong, typed error propagation across nodes, scheduler, and runner (thiserror + miette)
-- Rich tracing spans (`tracing`) and pretty diagnostics (`miette`)
-- Optional checkpointing via SQLite (or in-memory)
+Weavegraph is a modern Rust framework for building complex, stateful workflows using graph-based execution. It's designed for AI agents, data processing pipelines, and any application requiring sophisticated state management with concurrent node execution.
 
 ## Workspace Layout
 
@@ -17,91 +16,311 @@ A Rust framework for graph-driven, concurrent agent workflows with explicit, ver
 - `rag_utils/` – semantic chunking + RAG helpers reused by demos and examples.
 
 ## Repo layout (key modules)
+## ✨ Key Features
 
-- `src/app.rs` – Orchestrates barriers and reducers; `App::invoke` runs to completion
-- `src/runtimes/` – Sessions, runner, checkpointing (in-memory and SQLite)
-- `src/schedulers/` – Frontier scheduler (`superstep`) with version gating
-- `src/reducers/` – Reducer registry and reducers for channels
-- `src/channels/` – Channels (`MessagesChannel`, `ExtrasChannel`, `ErrorsChannel`) and error models (`ErrorEvent`)
-- `src/node.rs` – `Node` trait with typed `NodeError` and `NodePartial` outputs
-- `src/run_demo{1,2,3}.rs` – Demos showing increasing sophistication
-- `src/main.rs` – CLI to select which demo to run
+- **🔄 Concurrent Graph Execution**: Bounded-concurrency scheduler with dependency resolution and versioned barrier synchronization
+- **📝 Rich Message System**: Type-safe message construction with role-based messaging for AI workflows
+- **🎯 Versioned State Management**: Channel-based state with snapshot isolation and deterministic merges
+- **🚨 Comprehensive Error Handling**: Structured error propagation with beautiful diagnostics via `miette` and `thiserror`
+- **📊 Built-in Observability**: Rich tracing spans and event streaming for monitoring and debugging
+- **💾 Flexible Persistence**: SQLite checkpointing with automatic schema management, plus in-memory options
+- **🎭 Conditional Workflows**: Dynamic routing and edge conditions based on runtime state
+- **🔧 Developer Experience**: Extensive examples, comprehensive docs, and ergonomic APIs
 
-## Running the demos (CLI)
+## 🚀 Quick Start
 
-Select a demo at runtime (default is `demo3`):
+Add Weavegraph to your `Cargo.toml`:
 
-```bash
-cargo run -- demo1
-cargo run -- demo2
-cargo run -- demo3
+```toml
+[dependencies]
+weavegraph = "0.1"
 ```
 
-What the demos showcase:
+### Basic Example
 
-- `demo1`: Basic graph execution via `App::invoke`, manual barrier examples, version bumps
-- `demo2`: Direct scheduler usage (`superstep`), ran/skipped nodes, barrier application each step
-- `demo3`: LLM-style nodes using Rig/Ollama, conditional edges, SQLite checkpointing, and error pretty-printing
+```rust
+use weavegraph::{
+    graph::GraphBuilder,
+    message::Message,
+    node::{Node, NodeContext, NodePartial},
+    state::VersionedState,
+};
+use async_trait::async_trait;
 
-Notes for `demo3`:
+// Define a simple greeting node
+struct GreetingNode;
 
-- Provider: Expects Ollama running at `http://localhost:11434` and the referenced models (e.g., `gemma3`, `gemma3:270m`). If unavailable, the demo will fail gracefully and emit a structured error; you’ll see a pretty-printed error ladder.
-- Checkpointing: Uses SQLite by default. The DB URL is resolved in this order:
-  - `GRAFT_SQLITE_URL` (e.g., `sqlite://graft.db`)
-  - `sqlite_db_name` set in code
-  - `SQLITE_DB_NAME` env var (filename only)
-  - Fallback: `sqlite://graft.db`
+#[async_trait]
+impl Node for GreetingNode {
+    async fn run(
+        &self,
+        _snapshot: weavegraph::state::StateSnapshot,
+        ctx: NodeContext,
+    ) -> Result<NodePartial, weavegraph::node::NodeError> {
+        ctx.emit("greeting", "Generating welcome message")?;
+        
+        let greeting = Message::assistant("Hello! How can I help you today?");
+        
+        Ok(NodePartial {
+            messages: Some(vec![greeting]),
+            extra: None,
+            errors: None,
+        })
+    }
+}
 
-  ## Examples (standalone)
+#[tokio::main]
+async fn main() -> miette::Result<()> {
+    // Build a simple graph
+    let graph = GraphBuilder::new()
+        .add_node("greet", GreetingNode)
+        .set_entry_point("greet")
+        .build()?;
 
-  Run the small example that prints prettified error events to the CLI:
+    // Create initial state and run
+    let state = VersionedState::new_with_user_message("Hello, system!");
+    let result = graph.invoke(state).await?;
+    
+    // Access results
+    for message in result.messages {
+        println!("{}: {}", message.role, message.content);
+    }
+    
+    Ok(())
+}
+```
 
-  ```bash
-  cargo run --example errors_pretty -q
-  ```
+## 📋 Core Concepts
 
-## Build, test, and logs
+### Messages
 
-Build and test:
+Messages are the primary communication primitive with convenient constructors:
+
+```rust
+use weavegraph::message::Message;
+
+// Use convenience constructors (recommended)
+let user_msg = Message::user("What's the weather like?");
+let assistant_msg = Message::assistant("It's sunny and 75°F!");
+let system_msg = Message::system("You are a helpful assistant.");
+
+// For custom roles
+let function_msg = Message::new("function", "Processing complete");
+
+// Complex cases with builder pattern
+let complex_msg = Message::builder()
+    .role("custom_agent")
+    .content("Task completed successfully")
+    .build();
+```
+
+### State Management
+
+Versioned state with channel isolation and snapshot consistency:
+
+```rust
+use weavegraph::state::VersionedState;
+
+// Simple initialization
+let state = VersionedState::new_with_user_message("Hello!");
+
+// Rich initialization with builder
+let state = VersionedState::builder()
+    .with_user_message("What's the weather?")
+    .with_system_message("You are a weather assistant")
+    .with_extra("location", serde_json::json!("San Francisco"))
+    .build();
+```
+
+### Graph Building
+
+Declarative workflow definition with conditional routing:
+
+```rust
+use weavegraph::graph::GraphBuilder;
+
+let graph = GraphBuilder::new()
+    .add_node("input", InputProcessorNode)
+    .add_node("analyze", AnalyzerNode) 
+    .add_node("respond", ResponseNode)
+    .add_edge("input", "analyze")
+    .add_conditional_edge("analyze", |state| {
+        if state.extra.contains_key("needs_escalation") {
+            "escalate"
+        } else {
+            "respond" 
+        }
+    })
+    .set_entry_point("input")
+    .build()?;
+```
+
+## 🔧 Examples
+
+The repository includes comprehensive examples demonstrating different patterns:
 
 ```bash
-cargo build
+# Basic node patterns and message handling
+cargo run --example basic_nodes
+
+# Advanced patterns: error handling, conditional routing, data transformation
+cargo run --example advanced_patterns
+
+# Error handling and pretty diagnostics
+cargo run --example errors_pretty
+```
+
+### Demo Applications
+
+Historical demo applications showcase evolution of capabilities:
+
+```bash
+# Basic graph execution patterns (examples/demo1.rs)
+cargo run --example demo1
+
+# Direct scheduler usage and barrier synchronization (examples/demo2.rs)  
+cargo run --example demo2
+
+# LLM workflows with Ollama integration (examples/demo3.rs)
+cargo run --example demo3
+
+# Advanced multi-step workflows (examples/demo4.rs)
+cargo run --example demo4
+```
+
+**Note**: Demo3 requires Ollama running at `http://localhost:11434` with models like `gemma3`. Use the provided `docker-compose.yml` to set up Ollama:
+
+```bash
+docker-compose up -d ollama
+```
+
+## 🏗️ Architecture
+
+Weavegraph is built around several core modules:
+
+- **[`message`]** - Type-safe message construction and role-based messaging
+- **[`state`]** - Versioned state management with channel isolation  
+- **[`node`]** - Node execution primitives and async trait definitions
+- **[`graph`]** - Workflow graph definition and conditional routing
+- **[`schedulers`]** - Concurrent execution with dependency resolution
+- **[`runtimes`]** - High-level execution runtime and checkpointing
+- **[`channels`]** - Channel-based state storage and versioning
+- **[`reducers`]** - State merge strategies and conflict resolution
+- **[`event_bus`]** - Event streaming and observability infrastructure
+
+## 🔍 Observability & Debugging
+
+### Tracing
+
+Rich tracing integration with configurable log levels:
+
+```bash
+# Debug level for weavegraph modules
+RUST_LOG=debug cargo run --example basic_nodes
+
+# Error level globally, debug for weavegraph
+RUST_LOG=error,weavegraph=debug cargo run --example advanced_patterns
+```
+
+### Event Streaming
+
+Built-in event bus for monitoring workflow execution:
+
+```rust
+use weavegraph::event_bus::{EventBus, MemorySink};
+
+// Custom event handling for testing
+let event_bus = EventBus::with_sink(MemorySink::new());
+let runner = AppRunner::with_bus(graph, event_bus);
+
+// Events include node starts/completions, state changes, errors
+```
+
+### Error Diagnostics
+
+Beautiful error reporting with context and suggestions:
+
+```rust
+// Automatic error context and pretty printing
+fn main() -> miette::Result<()> {
+    // Your workflow code here
+    Ok(())
+}
+```
+
+## 💾 Persistence
+
+### SQLite Checkpointing
+
+Automatic state persistence with configurable database location:
+
+```rust
+use weavegraph::runtimes::SqliteCheckpointer;
+
+let checkpointer = SqliteCheckpointer::new("sqlite://workflow.db").await?;
+let runner = AppRunner::with_checkpointer(graph, checkpointer);
+```
+
+Database URL resolution order:
+1. `WEAVEGRAPH_SQLITE_URL` environment variable
+2. Explicit URL in code
+3. `SQLITE_DB_NAME` environment variable (filename only)
+4. Default: `sqlite://weavegraph.db`
+
+### In-Memory Mode
+
+For testing and ephemeral workflows:
+
+```rust
+let runner = AppRunner::new(graph); // Uses in-memory state
+```
+
+## 🧪 Testing
+
+Run the comprehensive test suite:
+
+```bash
+# All tests with output
 cargo test --all -- --nocapture
+
+# Specific test categories
+cargo test schedulers:: -- --nocapture
+cargo test channels:: -- --nocapture
+cargo test integration:: -- --nocapture
 ```
 
-Tracing and logs:
+Property-based testing with `proptest` ensures correctness across edge cases.
 
-- The default filter is `info,graft=debug`. Override with `RUST_LOG`:
+## 🚀 Production Considerations
 
-```bash
-RUST_LOG=debug cargo run -- demo2
-```
+### Performance
 
-## Event bus streaming
+- Bounded concurrency prevents resource exhaustion
+- Snapshot isolation eliminates state races
+- Channel-based architecture enables efficient partial updates
+- SQLite checkpointing supports failure recovery
 
-- `AppRunner` wires an event bus that streams node/lifecycle messages to stdout; `listen_for_events()` spins the default listener.
-- To plug in custom sinks (e.g., telemetry dashboards), construct an `EventBus`, configure listeners yourself, and pass it into `AppRunner::with_options_and_bus` (or the `*_arc` variant). Set `start_listener = false` if you want to manage listener tasks manually.
-- Use helpers like `EventBus::with_sink(MemorySink::new())` for test harnesses or `EventBus::with_sink_and_formatter` to pair a custom sink with a formatter; the default `StdOutSink` flushes each line for responsive streaming.
-- Call `EventBus::stop_listener().await` when shutting down long-lived services to flush outstanding messages and end the background task cleanly.
+### Monitoring
 
-## Error handling and diagnostics
+- Structured event streaming for observability platforms
+- Rich tracing spans for distributed tracing
+- Error aggregation and pretty diagnostics
+- Custom event sinks for metrics collection
 
-- Nodes return `Result<NodePartial, NodeError>`
-- Scheduler returns `Result<StepRunResult, SchedulerError>`; node failures include context (`kind`, `step`)
-- Runner surfaces `RunnerError` and, on failure, emits an `ErrorEvent` into the dedicated errors channel via `NodePartial.errors`
-- Demos print a human-friendly error ladder via `errors::pretty_print` at the end
-- Binaries return `miette::Result`, so typed errors render nicely without extra glue code
+### Deployment
 
-## Persistence
+- Docker-ready with provided compose configuration
+- Environment-based configuration
+- Graceful shutdown handling
+- Migration support for schema evolution
 
-- In-memory and SQLite checkpointing are available; demos 1–2 run in-memory; demo 3 uses SQLite by default.
-- The runner will attempt to create the SQLite file if it doesn’t exist.
+## 🎓 Project Background
 
-## Contributing
+Weavegraph originated as a capstone project for a Rust online course, developed by contributors with Python backgrounds and experience with LangGraph and LangChain. The goal was to bring similar graph-based workflow capabilities to Rust while leveraging its performance, safety, and concurrency advantages.
 
-Contributions are welcome! See `doc/` for design notes and plans. PRs with tests, tracing, or improved diagnostics are especially appreciated.
+While rooted in educational exploration, Weavegraph has evolved into a production-ready framework with continued active development well beyond the classroom setting.
 
-## License
+## 🤝 Contributing
 
 MIT
 
@@ -118,3 +337,22 @@ Query the chunk database produced by the ingestion run:
 ```bash
 cargo run -p rag_utils --example query_chunks
 ```
+We welcome contributions! Please see our [contributing guidelines](CONTRIBUTING.md) for details.
+
+Areas we're particularly interested in:
+- Additional persistence backends (PostgreSQL, Redis)
+- Enhanced AI/LLM integration patterns
+- Performance optimizations
+- Documentation improvements
+- Example applications
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🔗 Links
+
+- [Documentation](https://docs.rs/weavegraph)
+- [Crates.io](https://crates.io/crates/weavegraph)
+- [Repository](https://github.com/Idleness76/weavegraph)
+- [Issues](https://github.com/Idleness76/weavegraph/issues)

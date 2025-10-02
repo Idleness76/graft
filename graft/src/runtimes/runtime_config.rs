@@ -25,7 +25,7 @@ impl RuntimeConfig {
             return Some(name);
         }
         dotenvy::dotenv().ok();
-        Some(std::env::var("SQLITE_DB_NAME").unwrap_or_else(|_| "graft.db".to_string()))
+        Some(std::env::var("SQLITE_DB_NAME").unwrap_or_else(|_| "weavegraph.db".to_string()))
     }
 
     pub fn new(

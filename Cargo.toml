@@ -8,9 +8,13 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/Idleness76/graft"
-homepage = "https://github.com/Idleness76/graft"
-documentation = "https://docs.rs/graft"
+
+repository = "https://github.com/Idleness76/weavegraph"
+readme = "README.md"
 keywords = ["graph", "workflow", "concurrency", "agents", "tracing"]
 categories = ["concurrency", "data-structures", "algorithms"]
 rust-version = "1.83"
+homepage = "https://github.com/Idleness76/weavegraph"
+documentation = "https://docs.rs/weavegraph"
+
+

@@ -22,17 +22,17 @@ use tracing::instrument;
 /// # Examples
 ///
 /// ```rust,no_run
-/// use graft::graph::GraphBuilder;
-/// use graft::runtimes::CheckpointerType;
-/// use graft::state::VersionedState;
-/// use graft::types::NodeKind;
-/// use graft::node::{Node, NodeContext, NodeError, NodePartial};
+/// use weavegraph::graph::GraphBuilder;
+/// use weavegraph::runtimes::CheckpointerType;
+/// use weavegraph::state::VersionedState;
+/// use weavegraph::types::NodeKind;
+/// use weavegraph::node::{Node, NodeContext, NodeError, NodePartial};
 /// use async_trait::async_trait;
 ///
 /// # struct MyNode;
 /// # #[async_trait]
 /// # impl Node for MyNode {
-/// #     async fn run(&self, _: graft::state::StateSnapshot, _: NodeContext) -> Result<NodePartial, NodeError> {
+/// #     async fn run(&self, _: weavegraph::state::StateSnapshot, _: NodeContext) -> Result<NodePartial, NodeError> {
 /// #         Ok(NodePartial::default())
 /// #     }
 /// # }
@@ -141,9 +141,9 @@ impl App {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use graft::state::VersionedState;
-    /// use graft::channels::Channel;
-    /// # use graft::app::App;
+    /// use weavegraph::state::VersionedState;
+    /// use weavegraph::channels::Channel;
+    /// # use weavegraph::app::App;
     /// # async fn example(app: App) -> Result<(), Box<dyn std::error::Error>> {
     /// let initial = VersionedState::new_with_user_message("Start workflow");
     /// let final_state = app.invoke(initial).await?;
@@ -217,11 +217,11 @@ impl App {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// # use graft::app::App;
-    /// # use graft::node::NodePartial;
-    /// # use graft::state::VersionedState;
-    /// # use graft::types::NodeKind;
-    /// # use graft::message::Message;
+    /// # use weavegraph::app::App;
+    /// # use weavegraph::node::NodePartial;
+    /// # use weavegraph::state::VersionedState;
+    /// # use weavegraph::types::NodeKind;
+    /// # use weavegraph::message::Message;
     /// # async fn example(app: App, state: &mut VersionedState) -> Result<(), String> {
     /// let partials = vec![NodePartial {
     ///     messages: Some(vec![Message::assistant("test")]),

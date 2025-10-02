@@ -23,13 +23,13 @@
 //! Run with: `cargo run --example advanced_patterns`
 
 use async_trait::async_trait;
-use graft::event_bus::EventBus;
-use graft::message::Message;
-use graft::node::{Node, NodeContext, NodeError, NodePartial};
-use graft::state::StateSnapshot;
-use graft::utils::collections::new_extra_map;
 use serde_json::json;
 use std::collections::HashMap;
+use weavegraph::event_bus::EventBus;
+use weavegraph::message::Message;
+use weavegraph::node::{Node, NodeContext, NodeError, NodePartial};
+use weavegraph::state::StateSnapshot;
+use weavegraph::utils::collections::new_extra_map;
 
 /// A node that simulates external API calls with potential failures and retry logic.
 ///
@@ -160,13 +160,12 @@ impl Node for ConditionalRouterNode {
     ) -> Result<NodePartial, NodeError> {
         ctx.emit("routing", "Evaluating routing conditions")?;
 
-        let route_value =
-            snapshot
-                .extra
-                .get(&self.route_key)
-                .ok_or_else(|| NodeError::MissingInput {
-                    what: "routing key not found in state",
-                })?;
+        let route_value = snapshot
+            .extra
+            .get(&self.route_key)
+            .ok_or(NodeError::MissingInput {
+                what: "routing key not found in state",
+            })?;
 
         // Find matching condition
         let mut selected_route = "default".to_string();
@@ -275,25 +274,25 @@ impl Node for DataTransformerNode {
                         TransformOperation::Uppercase => source_value
                             .as_str()
                             .map(|s| json!(s.to_uppercase()))
-                            .unwrap_or_else(|| json!(null)),
+                            .unwrap_or(json!(null)),
                         TransformOperation::Lowercase => source_value
                             .as_str()
                             .map(|s| json!(s.to_lowercase()))
-                            .unwrap_or_else(|| json!(null)),
+                            .unwrap_or(json!(null)),
                         TransformOperation::Reverse => source_value
                             .as_str()
                             .map(|s| json!(s.chars().rev().collect::<String>()))
-                            .unwrap_or_else(|| json!(null)),
+                            .unwrap_or(json!(null)),
                         TransformOperation::Length => source_value
                             .as_str()
                             .map(|s| json!(s.len()))
                             .or_else(|| source_value.as_array().map(|a| json!(a.len())))
-                            .unwrap_or_else(|| json!(null)),
+                            .unwrap_or(json!(null)),
                         TransformOperation::Multiply(factor) => source_value
                             .as_i64()
                             .map(|n| json!(n * factor))
                             .or_else(|| source_value.as_f64().map(|n| json!(n * (*factor as f64))))
-                            .unwrap_or_else(|| json!(null)),
+                            .unwrap_or(json!(null)),
                         TransformOperation::JsonPath(_path) => {
                             // Simplified JSONPath-like operation
                             json!(format!("jsonpath_result_for_{}", rule.source_key))

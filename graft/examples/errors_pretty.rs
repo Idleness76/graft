@@ -1,6 +1,7 @@
 use chrono::{TimeZone, Utc};
 use graft::channels::errors::{pretty_print, ErrorEvent, ErrorScope, LadderError};
 use serde_json::json;
+use weavegraph::channels::errors::{pretty_print, ErrorEvent, ErrorScope, LadderError};
 
 fn main() {
     // Sample events across scopes with a nested cause chain and context/tags

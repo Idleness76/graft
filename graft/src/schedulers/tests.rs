@@ -5,6 +5,9 @@ use crate::testing::{
     create_test_snapshot, make_delayed_registry, make_test_registry, FailingNode,
 };
 use crate::types::NodeKind;
+use crate::utils::testing::{
+    create_test_snapshot, make_delayed_registry, make_test_registry, FailingNode,
+};
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 

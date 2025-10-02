@@ -15,7 +15,7 @@ fn init_tracing() {
         .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE);
 
     let filter = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("error,graft=error"))
+        .or_else(|_| EnvFilter::try_new("error,weavegraph=error"))
         .unwrap();
 
     tracing_subscriber::registry()

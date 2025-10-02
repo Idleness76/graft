@@ -1,6 +1,6 @@
 -- 0001_init.sql
 --
--- Initial SQLite schema for Graft session & step checkpointing.
+-- Initial SQLite schema for Weavegraph session & step checkpointing.
 -- This supports a future `SQLiteCheckpointer` implementation that can:
 --   * Create / resume sessions by `session_id`
 --   * Persist a full durable checkpoint after every barrier (superstep)

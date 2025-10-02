@@ -1,5 +1,5 @@
 /*!
-Persistence primitives for serializing/deserializing Graft runtime
+Persistence primitives for serializing/deserializing Weavegraph runtime
 state and checkpoints (used by the SQLite checkpointer and any future
 persistent backends).
 
@@ -26,7 +26,22 @@ use crate::{
     runtimes::checkpointer::Checkpoint,
     state::VersionedState,
     types::NodeKind,
+    utils::json_ext::JsonSerializable,
 };
+
+/// Blanket implementation of JsonSerializable for all suitable types using PersistenceError.
+impl<T> JsonSerializable<PersistenceError> for T
+where
+    T: serde::Serialize + for<'de> serde::de::DeserializeOwned,
+{
+    fn to_json_string(&self) -> std::result::Result<String, PersistenceError> {
+        serde_json::to_string(self).map_err(|e| PersistenceError::Serde { source: e })
+    }
+
+    fn from_json_str(s: &str) -> std::result::Result<Self, PersistenceError> {
+        serde_json::from_str(s).map_err(|e| PersistenceError::Serde { source: e })
+    }
+}
 
 /// Channel that stores a vector collection (e.g., messages) with version metadata.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -88,6 +103,15 @@ pub struct PersistedCheckpoint {
     pub concurrency_limit: usize,
     /// RFC3339 string form of creation time (keeps chrono::DateTime out of serialized shape).
     pub created_at: String,
+    /// Nodes that executed in this step, encoded as strings
+    #[serde(default)]
+    pub ran_nodes: Vec<String>,
+    /// Nodes that were skipped in this step, encoded as strings
+    #[serde(default)]
+    pub skipped_nodes: Vec<String>,
+    /// Channels that were updated in this step
+    #[serde(default)]
+    pub updated_channels: Vec<String>,
 }
 
 use miette::Diagnostic;
@@ -98,14 +122,14 @@ use thiserror::Error;
 pub enum PersistenceError {
     #[error("missing field: {0}")]
     #[diagnostic(
-        code(graft::persistence::missing_field),
+        code(weavegraph::persistence::missing_field),
         help("Populate the field in the persisted JSON before conversion.")
     )]
     MissingField(&'static str),
 
     #[error("JSON serialization/deserialization failed: {source}")]
     #[diagnostic(
-        code(graft::persistence::serde),
+        code(weavegraph::persistence::serde),
         help("Ensure the JSON structure matches Persisted* types.")
     )]
     Serde {
@@ -114,7 +138,7 @@ pub enum PersistenceError {
     },
 
     #[error("persistence error: {0}")]
-    #[diagnostic(code(graft::persistence::other))]
+    #[diagnostic(code(weavegraph::persistence::other))]
     Other(String),
 }
 
@@ -179,6 +203,9 @@ impl From<&Checkpoint> for PersistedCheckpoint {
             versions_seen: PersistedVersionsSeen(cp.versions_seen.clone()),
             concurrency_limit: cp.concurrency_limit,
             created_at: cp.created_at.to_rfc3339(),
+            ran_nodes: cp.ran_nodes.iter().map(|k| k.encode()).collect(),
+            skipped_nodes: cp.skipped_nodes.iter().map(|k| k.encode()).collect(),
+            updated_channels: cp.updated_channels.clone(),
         }
     }
 }
@@ -189,6 +216,12 @@ impl TryFrom<PersistedCheckpoint> for Checkpoint {
     fn try_from(p: PersistedCheckpoint) -> Result<Self> {
         let state = VersionedState::try_from(p.state)?;
         let frontier: Vec<NodeKind> = p.frontier.iter().map(|s| NodeKind::decode(s)).collect();
+        let ran_nodes: Vec<NodeKind> = p.ran_nodes.iter().map(|s| NodeKind::decode(s)).collect();
+        let skipped_nodes: Vec<NodeKind> = p
+            .skipped_nodes
+            .iter()
+            .map(|s| NodeKind::decode(s))
+            .collect();
         let parsed_dt = chrono::DateTime::parse_from_rfc3339(&p.created_at)
             .map(|dt| dt.with_timezone(&Utc))
             .unwrap_or_else(|_| Utc::now());
@@ -200,29 +233,17 @@ impl TryFrom<PersistedCheckpoint> for Checkpoint {
             versions_seen: p.versions_seen.0,
             concurrency_limit: p.concurrency_limit,
             created_at: parsed_dt,
+            ran_nodes,
+            skipped_nodes,
+            updated_channels: p.updated_channels,
         })
     }
 }
 
-/* ---------- Convenience JSON helpers (optional) ---------- */
+/* ---------- Convenience JSON helpers (using JsonSerializable trait from utils::json_ext) ---------- */
 
-impl PersistedState {
-    pub fn to_json_string(&self) -> Result<String> {
-        serde_json::to_string(self).map_err(|e| PersistenceError::Serde { source: e })
-    }
-    pub fn from_json_str(s: &str) -> Result<Self> {
-        serde_json::from_str(s).map_err(|e| PersistenceError::Serde { source: e })
-    }
-}
-
-impl PersistedCheckpoint {
-    pub fn to_json_string(&self) -> Result<String> {
-        serde_json::to_string(self).map_err(|e| PersistenceError::Serde { source: e })
-    }
-    pub fn from_json_str(s: &str) -> Result<Self> {
-        serde_json::from_str(s).map_err(|e| PersistenceError::Serde { source: e })
-    }
-}
+// Both PersistedState and PersistedCheckpoint automatically implement JsonSerializable
+// through the blanket implementation above, providing to_json_string() and from_json_str() methods.
 
 /* ---------- Tests ---------- */
 
@@ -282,6 +303,9 @@ mod tests {
             ]),
             concurrency_limit: 4,
             created_at: Utc::now(),
+            ran_nodes: vec![NodeKind::Start, NodeKind::Other("X".into())],
+            skipped_nodes: vec![NodeKind::End],
+            updated_channels: vec!["messages".to_string(), "extra".to_string()],
         };
         let persisted = PersistedCheckpoint::from(&cp);
         let json = persisted.to_json_string().unwrap();
@@ -293,6 +317,9 @@ mod tests {
         assert_eq!(cp.frontier.len(), cp2.frontier.len());
         assert_eq!(cp.concurrency_limit, cp2.concurrency_limit);
         assert_eq!(cp.versions_seen, cp2.versions_seen);
+        assert_eq!(cp.ran_nodes, cp2.ran_nodes);
+        assert_eq!(cp.skipped_nodes, cp2.skipped_nodes);
+        assert_eq!(cp.updated_channels, cp2.updated_channels);
     }
 
     #[test]

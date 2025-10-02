@@ -14,5 +14,5 @@ make_ollama_volume:
 	#create the volume from the base image
 	docker create -v ${ollama_volume_name}:/data --name ${ollama_volume_name} alpine:latest
 
-graft:check_setup
+weavegraph:check_setup
 	docker compose -f docker-compose.yml up -d --build --pull always
