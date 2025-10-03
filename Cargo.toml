@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "weavegraph"
+    "rag_utils"
 ]
 resolver = "2"
 
