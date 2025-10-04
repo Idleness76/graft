@@ -2,7 +2,7 @@
 name = "weavegraph"
 version = "0.1.0-alpha.3"
 edition = "2021"
-description = "Graph-driven, concurrent agent workflow framework with versioned state, deterministic barrier merges, and rich diagnostics."
+description.workspace = true
 license = "MIT"
 repository = "https://github.com/Idleness76/weavegraph"
 readme = "README.md"
